@@ -1,4 +1,5 @@
 using AuthenticationBackend.Endpoints;
+using APIEndpoints.Endpoints;
 using BackendAuthentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -40,6 +41,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
             )
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = 401;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync("{\"message\":\"You are not authorized\"}");
+            },
+            OnForbidden = context =>
+            {
+                context.Response.StatusCode = 403;
+                context.Response.ContentType = "application/json";
+                return context.Response.WriteAsync("{\"message\":\"You do not have the required role\"}");
+            }
+        };
     });
 builder.Services.AddAuthorization();
 
@@ -50,6 +68,7 @@ server.MapGet("/", (string? user = "user") => // default route
 {
     return Results.Json(new { message = $"Hello {user} from MyAuthenticationBackend!" }, statusCode: 200);
 });
+// protected route test
 server.MapGet("/protected-endpoint", [Authorize(Roles = "admin")] (HttpContext context) =>
 {
     var user = context.User;
@@ -61,5 +80,6 @@ server.MapGet("/protected-endpoint", [Authorize(Roles = "admin")] (HttpContext c
     return Results.Json(new { message = $"Hello user {userId} with role {role} from MyAuthenticationBackend!" }, statusCode: 200);
 });
 server.MapAuthEndpoints();
+server.MapAPIEndpoints();
 
 server.Run();

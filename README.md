@@ -10,4 +10,7 @@ Environmental Variables
     "Audience": "mybackend-user",
     "ExpireMinutes": 60
   },
+  "MyAnimeList": {
+    "ClientId": "YOUR_CLIENT_ID"
+  },
 }
