@@ -5,6 +5,7 @@ using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
 using System.Text;
+using Confluent.Kafka;
 
 namespace AuthenticationBackend.Endpoints;
 public static class AuthEndpoints
@@ -14,7 +15,7 @@ public static class AuthEndpoints
         var group = server.MapGroup("/auth").WithTags("Auth");
 
         group.MapGet("/", () => "authentication route");
-        group.MapPost("/login", async (DbHelper dbHelper, LogInRequest request, IConfiguration config) =>
+        group.MapPost("/login", async (DbHelper dbHelper, IProducer<Null, string> producer, IConfiguration config, LogInRequest request) =>
         {
             request.Email = request.Email.Trim();
             request.Password = request.Password.Trim();
@@ -60,7 +61,11 @@ public static class AuthEndpoints
                     signingCredentials: creds
                 );
 
+                // convert my token object to string for a standard JWT format
                 var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+                var message = new Message<Null, string> { Value = $"user {id} has logged in!" };
+                var deliveryResult = await producer.ProduceAsync("test-topic", message);
 
                 return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = tokenString }, statusCode: 200);
             }

@@ -3,8 +3,10 @@ using BackendAuthentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text;
+using Confluent.Kafka;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +19,11 @@ if (connStr == null)
 
 // builder configs
 builder.Services.AddSingleton(new DbHelper(connStr));
+builder.Services.AddSingleton<IProducer<Null, string>>(sp =>
+{
+    var config = new ProducerConfig { BootstrapServers = "localhost:9092" };
+    return new ProducerBuilder<Null, string>(config).Build();
+});
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
