@@ -1,41 +1,25 @@
+using AuthenticationBackend.Endpoints;
+using BackendAuthentication;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// environment variables
+var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+if (connStr == null)
 {
-    app.MapOpenApi();
+    throw new Exception("Connection string 'DefaultConnection' not found.");
 }
 
-app.UseHttpsRedirection();
+// builder configs
+builder.Services.AddSingleton(new DbHelper(connStr));
 
-var summaries = new[]
+var server = builder.Build();
+
+// routes
+server.MapGet("/", (string? user = "user") => // default route
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    return Results.Json(new { message = $"Hello {user} from MyAuthenticationBackend!" }, statusCode: 200);
+});
+server.MapAuthEndpoints();
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
-
-app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+server.Run();
