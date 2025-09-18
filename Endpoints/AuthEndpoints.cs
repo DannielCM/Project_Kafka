@@ -1,6 +1,10 @@
 using MySql.Data.MySqlClient;
 using BCrypt.Net;
 using BackendAuthentication;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
+using System.Text;
 
 namespace AuthenticationBackend.Endpoints;
 public static class AuthEndpoints
@@ -10,7 +14,7 @@ public static class AuthEndpoints
         var group = server.MapGroup("/auth").WithTags("Auth");
 
         group.MapGet("/", () => "authentication route");
-        group.MapPost("/login", async (DbHelper dbHelper, LogInRequest request) =>
+        group.MapPost("/login", async (DbHelper dbHelper, LogInRequest request, IConfiguration config) =>
         {
             request.Email = request.Email.Trim();
             request.Password = request.Password.Trim();
@@ -27,14 +31,38 @@ public static class AuthEndpoints
             using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
+                var id = reader.GetInt32(reader.GetOrdinal("id"));
                 var password = reader.GetString(reader.GetOrdinal("password"));
+                var role = reader.GetString(reader.GetOrdinal("role"));
 
                 if (!BCrypt.Net.BCrypt.Verify(request.Password, password))
                 {
                     return Results.Json(new { message = "INVALID CREDENTIALS!" }, statusCode: 401);
                 }
 
-                return Results.Json(new { message = "LOGIN SUCCESSFUL!" }, statusCode: 200);
+                // write claim/body of the token
+                var claims = new[] {
+                    new Claim(ClaimTypes.NameIdentifier, id.ToString()),
+                    new Claim(ClaimTypes.Role, role)
+                };
+
+                // create key for signing the token
+                var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]));
+
+                // signing algorithm used to generate the token
+                var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+                var token = new JwtSecurityToken(
+                    issuer: config["Jwt:Issuer"],
+                    audience: config["Jwt:Audience"],
+                    claims: claims,
+                    expires: DateTime.UtcNow.AddHours(1),
+                    signingCredentials: creds
+                );
+
+                var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+                return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = tokenString }, statusCode: 200);
             }
             else
             {
