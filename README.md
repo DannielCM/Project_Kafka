@@ -17,6 +17,7 @@ Please put this in your `appsettings.json` and fill out your own data:
     "ClientId": "YOUR_CLIENT_ID"
   }
 }
+```
 
 ## Database Schema Setup
 
