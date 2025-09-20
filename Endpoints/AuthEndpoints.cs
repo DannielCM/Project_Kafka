@@ -68,15 +68,19 @@ public static class AuthEndpoints
 
                     try
                     {
-                        var message = new Message<Null, string> { Value = $"user {id} has logged in!" };
-
-                        producer.Produce("test-topic", message, (deliveryReport) =>
+                        var metadata = producer.GetMetadata(TimeSpan.FromSeconds(1));
+                        if (metadata.Brokers.Count > 0)
                         {
-                            if (deliveryReport.Error.IsError)
-                                Console.Error.WriteLine($"Kafka delivery failed: {deliveryReport.Error.Reason}");
-                            else
-                                Console.WriteLine($"Kafka message delivered to {deliveryReport.TopicPartitionOffset}");
-                        });
+                            var message = new Message<Null, string> { Value = $"user {id} has logged in!" };
+
+                            producer.Produce("test-topic", message, (deliveryReport) =>
+                            {
+                                if (deliveryReport.Error.IsError)
+                                    Console.Error.WriteLine($"Kafka delivery failed: {deliveryReport.Error.Reason}");
+                                else
+                                    Console.WriteLine($"Kafka message delivered to {deliveryReport.TopicPartitionOffset}");
+                            });
+                        }
                     }
                     catch (Exception ex)
                     {
