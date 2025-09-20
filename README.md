@@ -17,5 +17,9 @@ Fill out your own data
   },
 }
 
+DATABASE SCHEME SETUP.
+THE DATABASE SCHEME IS PLACED IN THE DATA FOLDER IN THE ROOT DIRECTORY.
+You may use MySQLWorkbench to import the .sql file.
+
 REGARDING KAFKA SERVICE
 Kafka service is an OPTIONAL service and may be excluded in the installation.
