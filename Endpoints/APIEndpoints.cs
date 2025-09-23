@@ -1,6 +1,8 @@
 using System.Net.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Text.Json;
+
 
 namespace APIEndpoints.Endpoints;
 public static class APIEndpoints
@@ -11,28 +13,24 @@ public static class APIEndpoints
         
         group.MapGet("/my-anime-list/anime/season/{year}/{season}", [Authorize] async (IConfiguration config, int year, string season, [FromQuery] int limit = 10) =>
         {
-            Console.WriteLine("Hello, world!");
-
             try
             {
                 var client_id = config["MyAnimeList:ClientId"];
-
-                var url = $"https://api.myanimelist.net/v2/anime/season/{year}/{season}?limit={limit}";
-
+                var seasonalUrl = $"https://api.myanimelist.net/v2/anime/season/{year}/{season}?limit={limit}";
 
                 using var httpClient = new HttpClient();
                 httpClient.DefaultRequestHeaders.Add("X-MAL-CLIENT-ID", client_id);
 
-                var response = await httpClient.GetAsync(url);
-
+                var response = await httpClient.GetAsync(seasonalUrl);
                 if (!response.IsSuccessStatusCode)
                 {
-                    return Results.Problem($"Error fetching data: {response.StatusCode}");
+                    return Results.Problem($"Error fetching seasonal data: {response.StatusCode}");
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
+                var jsonDoc = JsonDocument.Parse(json);
 
-                return Results.Json(json);
+                return Results.Json(jsonDoc);
             }
             catch (Exception ex)
             {

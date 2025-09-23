@@ -4,8 +4,11 @@ using BackendAuthentication;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using System.Text;
-using Confluent.Kafka;
+using Microsoft.Extensions.Caching.Memory;
+using MyAuthenticationBackend.AppServices;
+using CaptchaGen.NetCore;
 
 namespace AuthenticationBackend.Endpoints;
 public static class AuthEndpoints
@@ -15,99 +18,78 @@ public static class AuthEndpoints
         var group = server.MapGroup("/auth").WithTags("Auth");
 
         group.MapGet("/", () => "authentication route");
-        group.MapPost("/login", async (DbHelper dbHelper, IProducer<Null, string> producer, IConfiguration config, LogInRequest request) =>
+        group.MapPost("/login", async (DbHelper dbHelper, IConfiguration config, IMemoryCache cache, JwtServices jwtService, KafkaProducerService kafkaService, LogInRequest request) =>
         {
             try
             {
+                if (!cache.TryGetValue(request.CaptchaId, out string storedText) || !storedText.Equals(request.CaptchaText, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Results.BadRequest(new { success = false, message = "CAPTCHA incorrect" });
+                }
+                cache.Remove(request.CaptchaId);
+
                 request.Email = request.Email.Trim();
                 request.Password = request.Password.Trim();
 
                 using var conn = dbHelper.GetConnection();
                 await conn.OpenAsync();
 
-                using var cmd = new MySqlCommand(@"
+                using var getAccountcmd = new MySqlCommand(@"
                 SELECT * FROM accounts
                 WHERE email = @email
                 ", conn);
-                cmd.Parameters.AddWithValue("@email", request.Email);
+                getAccountcmd.Parameters.AddWithValue("@email", request.Email);
 
-                using var reader = await cmd.ExecuteReaderAsync();
-                if (await reader.ReadAsync())
+                int id;
+                string password;
+                string role;
+                using (var reader = await getAccountcmd.ExecuteReaderAsync())
                 {
-                    var id = reader.GetInt32(reader.GetOrdinal("id"));
-                    var password = reader.GetString(reader.GetOrdinal("password"));
-                    var role = reader.GetString(reader.GetOrdinal("role"));
-
-                    if (!BCrypt.Net.BCrypt.Verify(request.Password, password))
+                    if (await reader.ReadAsync())
+                    {
+                        id = reader.GetInt32(reader.GetOrdinal("id"));
+                        password = reader.GetString(reader.GetOrdinal("password"));
+                        role = reader.GetString(reader.GetOrdinal("role"));
+                    }
+                    else
                     {
                         return Results.Json(new { message = "INVALID CREDENTIALS!" }, statusCode: 401);
                     }
-
-                    // write claim/body of the token
-                    var claims = new[] {
-                    new Claim(ClaimTypes.NameIdentifier, id.ToString()),
-                    new Claim(ClaimTypes.Role, role)
-                };
-
-                    // create key for signing the token
-                    var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]));
-
-                    // signing algorithm used to generate the token
-                    var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-                    var token = new JwtSecurityToken(
-                        issuer: config["Jwt:Issuer"],
-                        audience: config["Jwt:Audience"],
-                        claims: claims,
-                        expires: DateTime.UtcNow.AddHours(1),
-                        signingCredentials: creds
-                    );
-
-                    // convert my token object to string for a standard JWT format
-                    var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
-
-                    try
-                    {
-                        var metadata = producer.GetMetadata(TimeSpan.FromSeconds(1));
-                        if (metadata.Brokers.Count > 0)
-                        {
-                            var message = new Message<Null, string> { Value = $"user {id} has logged in!" };
-
-                            producer.Produce("test-topic", message, (deliveryReport) =>
-                            {
-                                if (deliveryReport.Error.IsError)
-                                    Console.Error.WriteLine($"Kafka delivery failed: {deliveryReport.Error.Reason}");
-                                else
-                                    Console.WriteLine($"Kafka message delivered to {deliveryReport.TopicPartitionOffset}");
-                            });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.Error.WriteLine($"Unexpected Kafka error: {ex}");
-                    }
-
-                    return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = tokenString }, statusCode: 200);
                 }
 
-                return Results.Json(new { message = "INVALID CREDENTIALS!" }, statusCode: 401);
+                if (!BCrypt.Net.BCrypt.Verify(request.Password, password))
+                {
+                    return Results.Json(new { message = "INVALID CREDENTIALS!" }, statusCode: 401);
+                }
+
+                var token = jwtService.GenerateToken(id, role);
+
+                using var updateLastLogincmd = new MySqlCommand(@"
+                UPDATE accounts 
+                SET last_login = NOW() 
+                WHERE email = @email;
+                ", conn);
+                updateLastLogincmd.Parameters.AddWithValue("@email", request.Email);
+
+                int rowsAffected = await updateLastLogincmd.ExecuteNonQueryAsync();
+                if (rowsAffected == 0)
+                {
+                    throw new Exception("Failed to update last login!");
+                }
+
+                kafkaService.SendLoginMessage(id);
+
+                return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = token }, statusCode: 200);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
-                return Results.Json(new { message = "INTERNAL SERVER ERROR!" }, statusCode: 500);
+                return Results.Json(new { message = "Internal server error." }, statusCode: 500);
             }
         });
         group.MapPost("/register", async (DbHelper dbHelper, RegisterRequest request) =>
         {
             try
             {
-                // validate data
-                if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
-                {
-                    return Results.Json(new { message = "EMAIL, PASSWORD AND ROLE ARE REQUIRED!" }, statusCode: 400);
-                }
-
                 request.Email = request.Email.Trim();
                 request.Password = request.Password.Trim();
                 request.Role = request.Role?.Trim();
@@ -118,9 +100,9 @@ public static class AuthEndpoints
                 string hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
                 using var cmd = new MySqlCommand(@"
-                INSERT INTO accounts(email, password, role)
-                VALUES(@email, @password, @role)
-                ", conn);
+                    INSERT INTO accounts(email, password, role)
+                    VALUES(@email, @password, @role)
+                    ", conn);
                 cmd.Parameters.AddWithValue("@email", request.Email);
                 cmd.Parameters.AddWithValue("@password", hashedPassword);
                 cmd.Parameters.AddWithValue("@role", request.Role ?? "basic");
@@ -128,16 +110,54 @@ public static class AuthEndpoints
                 int rowsAffected = await cmd.ExecuteNonQueryAsync();
                 if (rowsAffected == 0)
                 {
-                    return Results.Json(new { message = "REGISTER FAILED!" }, statusCode: 500);
+                    throw new Exception("Failed to create account!");
                 }
 
                 return Results.Json(new { message = "REGISTER SUCCESSFUL!" }, statusCode: 201);
             } 
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
-                return Results.Json(new { message = "INTERNAL SERVER ERROR!" }, statusCode: 500);
+                return Results.Json(new { message = ex.Message ?? "INTERNAL SERVER ERROR!" }, statusCode: 500);
             }
+        });
+        group.MapPost("/reset-password", [Authorize] async (DbHelper dbHelper, HttpContext httpContext, UserServices userServices, ResetPasswordRequest request) =>
+        {
+            try
+            {
+                var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                int.TryParse(userIdClaim, out int userId);
+                var passwordReset = await userServices.resetPasswordAsync(userId, request.CurrentPassword, request.NewPassword, request.NewPasswordConfirmation);
+
+                return Results.Ok(new { message = "PASSWORD RESET SUCCESSFUL!" });
+            }
+            catch (ArgumentException argEx)
+            {
+                return Results.BadRequest(new { message = argEx.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(new { message = ex.Message }, statusCode: 500);
+            }
+        });
+        group.MapGet("/captcha/generate", (IMemoryCache cache) =>
+        {
+            // generate random code
+            string code = ImageFactory.CreateCode(5);
+
+            // create memory buffer for holding image data, 
+            using var ms = new MemoryStream();
+            // generate image and save to memory buffer
+            using (var img = ImageFactory.BuildImage(code, 60, 200, 20, 10))
+            {
+                img.CopyTo(ms);
+            }
+
+            // generate unique catpcha id
+            string captchaId = Guid.NewGuid().ToString();
+            // store the captcha code with id in the cache for 5 minutes
+            cache.Set(captchaId, code, TimeSpan.FromMinutes(5));
+
+            return Results.File(ms.ToArray(), "image/jpeg", captchaId);
         });
     }
 }

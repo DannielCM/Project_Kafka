@@ -8,6 +8,9 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text;
 using Confluent.Kafka;
+using Microsoft.Extensions.DependencyInjection;
+using CaptchaGen.NetCore;
+using MyAuthenticationBackend.AppServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +23,20 @@ if (connStr == null)
 
 // builder configs
 builder.Services.AddSingleton(new DbHelper(connStr));
+builder.Services.AddSingleton<JwtServices>();
+builder.Services.AddSingleton<UserServices>();
+builder.Services.AddSingleton<KafkaProducerService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        policy =>
+        {
+            policy.AllowAnyOrigin()
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
 builder.Services.AddSingleton<IProducer<Null, string>>(sp =>
 {
     var config = new ProducerConfig { BootstrapServers = "localhost:9092" };
@@ -38,7 +55,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)
             )
         };
 
@@ -62,6 +79,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 var server = builder.Build();
+
+server.UseCors("AllowAll");
 
 // routes
 server.MapGet("/", (string? user = "user") => // default route
