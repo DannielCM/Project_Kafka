@@ -1,6 +1,7 @@
 using MySql.Data.MySqlClient;
 using BackendAuthentication;
 using BCrypt.Net;
+using MyAuthenticationBackend.Models;
 
 namespace MyAuthenticationBackend.AppServices;
 public class UserServices
@@ -12,53 +13,87 @@ public class UserServices
 		_dbHelper = dbHelper;
 	}
 
-	public async Task<bool> resetPasswordAsync(int id, string currentPassword, string newPassword, string newPasswordConfirmation) {
-		if (newPassword != newPasswordConfirmation)
-			throw new ArgumentException("Passwords do not match.");
+	public async Task<PasswordResetResults> ChangePassword(int id, string currentPassword, string newPassword, string newPasswordConfirmation) {
+        if (newPassword != newPasswordConfirmation)
+        {
+            return new PasswordResetResults
+            {
+                Success = false,
+                Message = "New password and confirmed password do not match."
+            };
+        }
 
-		using var conn = _dbHelper.GetConnection();
-		await conn.OpenAsync();
+        using var conn = _dbHelper.GetConnection();
+        await conn.OpenAsync();
 
-		using var storedHashcmd = new MySqlCommand(@"
-			SELECT password 
-			FROM accounts 
-			WHERE id = @Id
-		", conn);
-		storedHashcmd.Parameters.AddWithValue("@Id", id);
-		
-		using (var reader = await storedHashcmd.ExecuteReaderAsync())
-		{
-			if (await reader.ReadAsync())
-			{
-				string storedHash = reader.GetString(reader.GetOrdinal("password"));
+        string storedHash;
 
-				bool isValid = BCrypt.Net.BCrypt.Verify(currentPassword, storedHash);
-				if (!isValid)
-					throw new ArgumentException("Current password is incorrect.");
+        using (var storedHashcmd = new MySqlCommand(@"
+            SELECT password 
+            FROM accounts 
+            WHERE id = @Id
+        ", conn))
+        {
+            storedHashcmd.Parameters.AddWithValue("@Id", id);
 
-				bool isSamePassword = BCrypt.Net.BCrypt.Verify(newPassword, storedHash);
-				if (isSamePassword)
-					throw new ArgumentException("New password cannot be the same as the current password.");
-			}
-			else
-			{
-				throw new ArgumentException("User not found.");
-			}
-		}
+            using var reader = await storedHashcmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return new PasswordResetResults
+                {
+                    Success = false,
+                    Message = "User not found."
+                };
+            }
 
-		string hashedPassword = BCrypt.Net.BCrypt.HashPassword(newPassword);
-		using var updatePasswordcmd = new MySqlCommand(@"
-			UPDATE accounts 
-			SET password = @NewHash WHERE id = @Id
-		", conn);
-		updatePasswordcmd.Parameters.AddWithValue("@NewHash", hashedPassword);
-		updatePasswordcmd.Parameters.AddWithValue("@Id", id);
+            storedHash = reader.GetString(reader.GetOrdinal("password"));
+        }
 
-		int rowsAffected = await updatePasswordcmd.ExecuteNonQueryAsync();
+        // Validate current password
+        if (!BCrypt.Net.BCrypt.Verify(currentPassword, storedHash))
+        {
+            return new PasswordResetResults
+            {
+                Success = false,
+                Message = "Current password is incorrect."
+            };
+        }
 
-		if (rowsAffected == 0)
-			throw new Exception("No rows were updated.");
+        // Check if new password is same as current
+        if (BCrypt.Net.BCrypt.Verify(newPassword, storedHash))
+        {
+            return new PasswordResetResults
+            {
+                Success = false,
+                Message = "New password cannot be the same as the current password."
+            };
+        }
 
-		return true;
-	}
+        // Update password
+        string hashedPassword = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        using var updatePasswordcmd = new MySqlCommand(@"
+            UPDATE accounts 
+            SET password = @NewHash 
+            WHERE id = @Id
+        ", conn);
+        updatePasswordcmd.Parameters.AddWithValue("@NewHash", hashedPassword);
+        updatePasswordcmd.Parameters.AddWithValue("@Id", id);
+
+        int rowsAffected = await updatePasswordcmd.ExecuteNonQueryAsync();
+
+        if (rowsAffected == 0)
+        {
+            return new PasswordResetResults
+            {
+                Success = false,
+                Message = "Password was not updated."
+            };
+        }
+
+        return new PasswordResetResults
+        {
+            Success = true,
+            Message = "Password has been successfully updated."
+        };
+    }
 }

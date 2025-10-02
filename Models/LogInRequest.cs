@@ -1,4 +1,4 @@
-namespace AuthenticationBackend.Endpoints;
+namespace MyAuthenticationBackend.Models;
 public class LogInRequest
 {
     public required string Email { get; set; }

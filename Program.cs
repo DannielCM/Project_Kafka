@@ -26,6 +26,7 @@ builder.Services.AddSingleton(new DbHelper(connStr));
 builder.Services.AddSingleton<JwtServices>();
 builder.Services.AddSingleton<UserServices>();
 builder.Services.AddSingleton<KafkaProducerService>();
+builder.Services.AddScoped<AuthenticationServices>();
 builder.Services.AddMemoryCache();
 builder.Services.AddCors(options =>
 {
@@ -76,7 +77,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Require2FAPending", policy => policy.RequireClaim("twofactor", "pending"));
+    options.AddPolicy("Require2FAVerified", policy => policy.RequireClaim("twofactor", "verified"));
+});
 
 var server = builder.Build();
 
