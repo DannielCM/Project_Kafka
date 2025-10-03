@@ -30,9 +30,11 @@ CREATE TABLE `accounts` (
   `password` varchar(100) NOT NULL,
   `role` varchar(25) NOT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `last_login` datetime DEFAULT NULL,
+  `two_factor_secret` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email_UNIQUE` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -41,7 +43,7 @@ CREATE TABLE `accounts` (
 
 LOCK TABLES `accounts` WRITE;
 /*!40000 ALTER TABLE `accounts` DISABLE KEYS */;
-INSERT INTO `accounts` VALUES (1,'test@test.com','$2a$11$qOgBF7U7Zw26KstORs1CAeHd6kk9/eB/foaqs.l83eOkTT7su0Ux2','basic','2025-09-17 22:10:14'),(2,'admin@gmail.com','$2a$11$3g4iMGR9AHpmXME9G15mwOSncLnbfHCn/JnQ5rmC0Fbq25hq2EAVa','admin','2025-09-18 14:23:38');
+INSERT INTO `accounts` VALUES (2,'admin@gmail.com','$2a$11$3A3pss5WEU2vcoweIc8TauURYK28kiVF8t1IQlP0cs8ehlyMYe2GS','admin','2025-09-18 14:23:38','2025-10-04 05:51:23','FZKZAMIWXQGEWGHWU2VRBRUIQ3HC4JPT'),(6,'test@gmail.com','$2a$11$ssxzQ4W4yTBF..Mgbx0UXOVSEwoXeWsefgh2dFEUtq6I5ynDZikUC','basicuser','2025-10-04 06:15:36','2025-10-04 06:16:00',NULL);
 /*!40000 ALTER TABLE `accounts` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -54,4 +56,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-09-18 14:39:40
+-- Dump completed on 2025-10-04  6:40:52

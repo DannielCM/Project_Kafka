@@ -13,11 +13,19 @@ Please put this in your `appsettings.json` and fill out your own data:
     "Audience": "mybackend-user",
     "ExpireMinutes": 60
   },
+  "Auth": {
+    "TwoFactorRedirectUrl": "/verify-2fa"
+  },
   "MyAnimeList": {
     "ClientId": "YOUR_CLIENT_ID"
   }
 }
 ```
+
+## MyAnimeList Client ID
+
+To get authorization id from MAL, you need to create an application on their [developer portal](https://myanimelist.net/apiconfig).
+Register your application and obtain the Client ID, then replace `YOUR_CLIENT_ID` in the configuration above.
 
 ## Database Schema Setup
 
@@ -27,5 +35,5 @@ You may use **MySQL Workbench** to import the `.sql` file.
 ---
 
 ## Kafka Service
-
+Currently disabled
 The Kafka service is **optional** and may be excluded from the installation.
