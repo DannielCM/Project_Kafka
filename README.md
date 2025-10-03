@@ -1,3 +1,7 @@
+## DO THIS BEFORE RUNNING THE APPLICATION
+
+dotnet restore
+
 # Environment Variables
 
 Please put this in your `appsettings.json` and fill out your own data:
@@ -37,3 +41,7 @@ You may use **MySQL Workbench** to import the `.sql` file.
 ## Kafka Service
 Currently disabled
 The Kafka service is **optional** and may be excluded from the installation.
+
+## ONCE ALL THE ABOVE IS DONE, RUN THE APPLICATION
+
+dotnet rn
