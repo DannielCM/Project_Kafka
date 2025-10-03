@@ -14,11 +14,12 @@ public class JwtServices
         _config = config;
     }
 
-    public string GenerateToken(int userId, string role, string twofaStatus, int minutes = 5)
+    public string GenerateToken(int userId, string email, string role, string twofaStatus, int minutes = 5)
     {
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+            new Claim(ClaimTypes.Email, email),
             new Claim(ClaimTypes.Role, role),
             new Claim("twofactor", twofaStatus)
         };

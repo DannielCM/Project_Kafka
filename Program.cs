@@ -73,7 +73,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             {
                 context.Response.StatusCode = 403;
                 context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync("{\"message\":\"You do not have the required role\"}");
+                return context.Response.WriteAsync("{\"message\":\"2FA requirement not satisfied\"}");
             }
         };
     });

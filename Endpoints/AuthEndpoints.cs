@@ -18,27 +18,30 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this WebApplication server)
     {
-        var group = server.MapGroup("/auth").WithTags("Auth");
+        var group = server.MapGroup("/api/auth").WithTags("Auth");
 
         group.MapGet("/", () => "authentication route");
 
         group.MapPost("/login", async (IMemoryCache cache, AuthenticationServices authService, LogInRequest request) =>
         {
-            var email = request.Email!.Trim().ToLower();
-            var password = request.Password!.Trim();
-            var captchaId = request.CaptchaId!.Trim();
-            var captchaText = request.CaptchaText!.Trim();
+            var email = request.Email?.Trim().ToLower();
+            var password = request.Password?.Trim();
+            var captchaId = request.CaptchaId?.Trim();
+            var captchaText = request.CaptchaText?.Trim();
 
             try
             {
+                if (string.IsNullOrEmpty(captchaId) || string.IsNullOrEmpty(captchaText))
+                {
+                    return Results.BadRequest(new { message = "Both captcha Id and captchaText is required!." });
+                }
                 // handle captcha validation ?? Make it modular perhaps? If I have the time to.
                 if (!cache.TryGetValue(captchaId, out string? storedText) || storedText == null || !storedText.Equals(captchaText, StringComparison.OrdinalIgnoreCase))
                 {
                     return Results.BadRequest(new { success = false, message = "CAPTCHA incorrect" });
                 }
-                cache.Remove(captchaId);
 
-                var result = await authService.AuthenticateUser(request);
+                var result = await authService.AuthenticateUser(email, password);
 
                 if (!result.Success)
                 {
@@ -48,8 +51,8 @@ public static class AuthEndpoints
                 // disable kafka service for now as it may cause problems.
                 // kafka service
                 //kafkaService.SendLoginMessage(id);
-
-                return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = result.Token }, statusCode: 200);
+                cache.Remove(captchaId);
+                return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = result.Token, redirectUrl = result.RedirectUrl }, statusCode: 200);
             }
             catch (Exception ex)
             {
@@ -64,7 +67,6 @@ public static class AuthEndpoints
             {
                 request.Email = request.Email!.Trim().ToLower();
                 request.Password = request.Password!.Trim();
-                request.Role = request.Role!.Trim().ToLower();
 
                 var result = await authService.RegisterUser(request);
 
@@ -84,9 +86,9 @@ public static class AuthEndpoints
 
         group.MapPost("/change-password", [Authorize(Policy = "Require2FAVerified")] async (DbHelper dbHelper, HttpContext httpContext, UserServices userServices, ResetPasswordRequest request) =>
         {
-            var currentPassword = request.CurrentPassword!.Trim();
-            var newPassword = request.NewPassword!.Trim();
-            var newPasswordConfirmation = request.NewPasswordConfirmation!.Trim();
+            var currentPassword = string.IsNullOrWhiteSpace(request.CurrentPassword) ? "" : request.CurrentPassword.Trim();
+            var newPassword = string.IsNullOrWhiteSpace(request.NewPassword) ? "" : request.NewPassword.Trim();
+            var newPasswordConfirmation = string.IsNullOrWhiteSpace(request.NewPasswordConfirmation) ? "" : request.NewPasswordConfirmation.Trim();
 
             try
             {
@@ -131,25 +133,70 @@ public static class AuthEndpoints
         });
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
-        group.MapGet("/2fa/setup", [Authorize(Policy = "Require2FAVerified")] async (IConfiguration config, DbHelper dbHelper, HttpContext httpContext) =>
+        group.MapGet("/2fa", [Authorize] async (HttpContext http, DbHelper dbHelper) =>
         {
+            // Get user ID from NameIdentifier claim
+            var userIdClaim = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (userIdClaim == null)
+            {
+                return Results.Unauthorized();
+            }
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Results.BadRequest("Invalid user ID.");
+            }
+
+            var connection = dbHelper.GetConnection();
+            await connection.OpenAsync();
+
+            var cmd = new MySqlCommand(@"
+                SELECT two_factor_secret 
+                FROM accounts 
+                WHERE id = @id;
+            ", connection);
+            cmd.Parameters.AddWithValue("@id", userId);
+
+            var result = await cmd.ExecuteScalarAsync();
+            bool twoFactorEnabled = result != null && result != DBNull.Value;
+
+            // Return whether 2FA is enabled
+            return Results.Json(new { enabled = twoFactorEnabled }, statusCode: 200);
+        });
+
+        // move the logic to a service class later, since the handler / endpoint is too cluttered.
+        group.MapPost("/2fa/setup", [Authorize(Policy = "Require2FAVerified")] async (IConfiguration config, DbHelper dbHelper, HttpContext httpContext, TFASetupRequest request) =>
+        {
+            var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
             var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            int.TryParse(userIdClaim, out int userId);
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Results.BadRequest("Invalid user ID.");
+            }
 
-            // Generate a new secret key for the user
-            var secretKey = KeyGeneration.GenerateRandomKey(20);
-            var base32Secret = Base32Encoding.ToString(secretKey);
+            bool enable2FA = request.Enabled == 1;
+            string base32Secret = null;
+            string qrCodeBase64 = null;
 
-            // Generate the otpauth URI
-            string issuer = config["Jwt:Issuer"] ?? "MyBackend";
-            string otpauthUri = $"otpauth://totp/{issuer}:{userId}?secret={base32Secret}&issuer={issuer}&digits=6";
+            if (enable2FA)
+            {
+                // Generate a new secret key for the user
+                var secretKey = KeyGeneration.GenerateRandomKey(20);
+                base32Secret = Base32Encoding.ToString(secretKey);
 
-            // Generate QR code
-            using var qrGenerator = new QRCodeGenerator();
-            using var qrCodeData = qrGenerator.CreateQrCode(otpauthUri, QRCodeGenerator.ECCLevel.Q);
-            using var qrCode = new PngByteQRCode(qrCodeData);
-            byte[] qrCodeImage = qrCode.GetGraphic(20);
+                // Generate the otpauth URI
+                string issuer = config["Jwt:Issuer"] ?? "MyBackend";
+                string otpauthUri = $"otpauth://totp/{issuer}:{email}?secret={base32Secret}&issuer={issuer}&digits=6";
 
+                // Generate QR code
+                using var qrGenerator = new QRCodeGenerator();
+                using var qrCodeData = qrGenerator.CreateQrCode(otpauthUri, QRCodeGenerator.ECCLevel.Q);
+                using var qrCode = new PngByteQRCode(qrCodeData);
+
+                byte[] qrCodeImage = qrCode.GetGraphic(20);
+                qrCodeBase64 = Convert.ToBase64String(qrCodeImage);
+            }
+
+            // Update the database
             using var connection = dbHelper.GetConnection();
             await connection.OpenAsync();
 
@@ -157,17 +204,23 @@ public static class AuthEndpoints
                 UPDATE accounts 
                 SET two_factor_secret = @secret 
                 WHERE id = @id;
-                ", connection);
-            cmd.Parameters.AddWithValue("@secret", base32Secret);
+            ", connection);
+            cmd.Parameters.AddWithValue("@secret", enable2FA ? base32Secret : DBNull.Value);
             cmd.Parameters.AddWithValue("@id", userId);
             await cmd.ExecuteNonQueryAsync();
 
-            return Results.Json(new { secret = base32Secret, qrCodeImage = Convert.ToBase64String(qrCodeImage) });
+            return Results.Json(new
+            {
+                enabled = enable2FA,
+                secret = base32Secret,
+                qrCodeImage = qrCodeBase64
+            });
         });
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
-        group.MapPost("/verify-2fa", [Authorize(Policy = "Require2FAPending")] async (DbHelper dbHelper, HttpContext httpContext, JwtServices jwtService, TFAVerificationRequest request) =>
+        group.MapPost("/2fa/verify", [Authorize(Policy = "Require2FAPending")] async (DbHelper dbHelper, HttpContext httpContext, JwtServices jwtService, TFAVerificationRequest request) =>
         {
+            var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
             var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             int.TryParse(userIdClaim, out int userId);
 
@@ -204,7 +257,7 @@ public static class AuthEndpoints
             }
 
             var role = httpContext.User.FindFirst(ClaimTypes.Role)?.Value ?? "User";
-            var token = jwtService.GenerateToken(userId, role, "verified", 60);
+            var token = jwtService.GenerateToken(userId, email, role, "verified", 60);
 
             return Results.Json(new { message = "2FA VERIFICATION SUCCESSFUL!", token = token }, statusCode: 200);
         });

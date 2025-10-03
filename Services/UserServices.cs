@@ -14,6 +14,15 @@ public class UserServices
 	}
 
 	public async Task<PasswordResetResults> ChangePassword(int id, string currentPassword, string newPassword, string newPasswordConfirmation) {
+        if (string.IsNullOrEmpty(currentPassword.Trim()) || string.IsNullOrEmpty(newPassword.Trim()) || string.IsNullOrEmpty(newPasswordConfirmation.Trim()))
+        {
+            return new PasswordResetResults
+            {
+                Success = false,
+                Message = "All password fields are required."
+            };
+        }
+
         if (newPassword != newPasswordConfirmation)
         {
             return new PasswordResetResults
@@ -27,7 +36,6 @@ public class UserServices
         await conn.OpenAsync();
 
         string storedHash;
-
         using (var storedHashcmd = new MySqlCommand(@"
             SELECT password 
             FROM accounts 

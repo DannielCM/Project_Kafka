@@ -1,8 +1,8 @@
 namespace MyAuthenticationBackend.Models;
 public class LogInRequest
 {
-    public required string Email { get; set; }
-    public required string Password { get; set; }
-    public required string CaptchaId { get; set; }
-    public required string CaptchaText { get; set; }
+    public string? Email { get; set; } = "";
+    public string? Password { get; set; } = "";
+    public string? CaptchaId { get; set; } = "";
+    public string? CaptchaText { get; set; } = "";
 }

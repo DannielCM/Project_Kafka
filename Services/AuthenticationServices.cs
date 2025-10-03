@@ -18,13 +18,39 @@ public class AuthenticationServices
         _jwtService = jwtService;
     }
 
-    public async Task<LoginResult> AuthenticateUser(LogInRequest request)
+    public async Task<LoginResult> AuthenticateUser(string email, string password)
     {
+        email = email?.Trim() ?? "";
+        password = password?.Trim() ?? "";
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            return new LoginResult { Success = false, Message = "EMAIL AND PASSWORD CANNOT BE EMPTY" };
+        }
+
+        var validationErrors = new List<string>();
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            validationErrors.Add("EMAIL AND PASSWORD CANNOT BE EMPTY");
+        }
+        if (!email.EndsWith("@gmail.com"))
+        {
+            validationErrors.Add("ONLY GMAIL ADDRESSES ARE ALLOWED");
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            return new LoginResult
+            {
+                Success = false,
+                Message = string.Join("; ", validationErrors)
+            };
+        }
+
         using var conn = _dbHelper.GetConnection();
         await conn.OpenAsync();
 
         using var cmd = new MySqlCommand("SELECT * FROM accounts WHERE email = @email", conn);
-        cmd.Parameters.AddWithValue("@email", request.Email);
+        cmd.Parameters.AddWithValue("@email", email);
 
         int id;
         string stored_hash;
@@ -48,14 +74,14 @@ public class AuthenticationServices
 
         reader.Close();
 
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, stored_hash))
+        if (!BCrypt.Net.BCrypt.Verify(password, stored_hash))
         {
             return new LoginResult { Success = false, Message = "INVALID CREDENTIALS" };
         }
 
         if (twoFactorSecret != null)
         {
-            var token = _jwtService.GenerateToken(id, role, "pending", 5);
+            var token = _jwtService.GenerateToken(id, email, role, "pending", 5);
             var redirectUrl = _config["Auth:TwoFactorRedirectUrl"];
 
             return new LoginResult
@@ -67,10 +93,10 @@ public class AuthenticationServices
             };
         }
 
-        var finalToken = _jwtService.GenerateToken(id, role, "verified", 60);
+        var finalToken = _jwtService.GenerateToken(id, email, role, "verified", 5);
 
         using var updateCmd = new MySqlCommand("UPDATE accounts SET last_login = NOW() WHERE email = @email", conn);
-        updateCmd.Parameters.AddWithValue("@email", request.Email);
+        updateCmd.Parameters.AddWithValue("@email", email);
         await updateCmd.ExecuteNonQueryAsync();
 
         return new LoginResult
@@ -83,6 +109,36 @@ public class AuthenticationServices
 
     public async Task<RegisterResults> RegisterUser(RegisterRequest request)
     {
+        var validationErrors = new List<string>();
+
+        if (string.IsNullOrEmpty(request.Email))
+        {
+            validationErrors.Add("EMAIL CANNOT BE EMPTY");
+        }
+
+        if (!string.IsNullOrEmpty(request.Email) && !request.Email.EndsWith("@gmail.com"))
+        {
+            validationErrors.Add("ONLY GMAIL ADDRESSES ARE ALLOWED");
+        }
+
+        if (string.IsNullOrEmpty(request.Password))
+        {
+            validationErrors.Add("PASSWORD CANNOT BE EMPTY");
+        }
+        else if (request.Password.Length < 5)
+        {
+            validationErrors.Add("PASSWORD MUST BE AT LEAST 5 CHARACTERS LONG");
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            return new RegisterResults
+            {
+                Success = false,
+                Message = string.Join("; ", validationErrors)
+            };
+        }
+
         using var conn = _dbHelper.GetConnection();
         await conn.OpenAsync();
 
