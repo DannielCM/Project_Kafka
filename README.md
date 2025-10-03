@@ -4,7 +4,8 @@ dotnet restore
 
 # Environment Variables
 
-Please put this in your `appsettings.json` and fill out your own data:
+Please put this in your `appsettings.Development.json` and fill out your own data:
+CREATE A FILE NAMED `appsettings.Development.json` IN THE ROOT DIRECTORY for local development if you dont have one yet. Avoid writing directly in appsettings.json.
 
 ```json
 {
