@@ -3,7 +3,7 @@ using BackendAuthentication;
 using BCrypt.Net;
 using MyAuthenticationBackend.Models;
 
-namespace MyAuthenticationBackend.AppServices;
+namespace MyAuthenticationBackend.Services;
 public class UserServices
 {
 	private readonly DbHelper _dbHelper;

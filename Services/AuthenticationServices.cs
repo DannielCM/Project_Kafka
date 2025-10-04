@@ -3,8 +3,9 @@ using Microsoft.Extensions.Configuration;
 using MyAuthenticationBackend.Models;
 using MySql.Data.MySqlClient;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 
-namespace MyAuthenticationBackend.AppServices;
+namespace MyAuthenticationBackend.Services;
 public class AuthenticationServices
 {
     private readonly DbHelper _dbHelper;
@@ -22,17 +23,13 @@ public class AuthenticationServices
     {
         email = email?.Trim() ?? "";
         password = password?.Trim() ?? "";
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
-        {
-            return new LoginResult { Success = false, Message = "EMAIL AND PASSWORD CANNOT BE EMPTY" };
-        }
 
         var validationErrors = new List<string>();
-        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
             validationErrors.Add("EMAIL AND PASSWORD CANNOT BE EMPTY");
         }
-        if (!email.EndsWith("@gmail.com"))
+        if (!email.EndsWith("@gmail.com", StringComparison.OrdinalIgnoreCase))
         {
             validationErrors.Add("ONLY GMAIL ADDRESSES ARE ALLOWED");
         }
@@ -52,51 +49,64 @@ public class AuthenticationServices
         using var cmd = new MySqlCommand("SELECT * FROM accounts WHERE email = @email", conn);
         cmd.Parameters.AddWithValue("@email", email);
 
-        int id;
-        string stored_hash;
-        string role;
-        string? twoFactorSecret;
-
-        using var reader = await cmd.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            id = reader.GetInt32(reader.GetOrdinal("id"));
-            stored_hash = reader.GetString(reader.GetOrdinal("password"));
-            role = reader.GetString(reader.GetOrdinal("role"));
-            twoFactorSecret = reader.IsDBNull(reader.GetOrdinal("two_factor_secret"))
-                ? null
-                : reader.GetString(reader.GetOrdinal("two_factor_secret"));
+        Account? account = null;
+        using (var reader = await cmd.ExecuteReaderAsync()) {
+            if (await reader.ReadAsync())
+            {
+                account = new Account
+                {
+                    Id = reader.GetInt32(reader.GetOrdinal("id")),
+                    Email = reader.GetString(reader.GetOrdinal("email")),
+                    StoredHashedPassword = reader.GetString(reader.GetOrdinal("password")),
+                    Role = reader.GetString(reader.GetOrdinal("role")),
+                    TwoFactorSecret = reader.IsDBNull(reader.GetOrdinal("two_factor_secret"))
+                        ? null
+                        : reader.GetString(reader.GetOrdinal("two_factor_secret"))
+                };
+            }
         }
-        else
+
+        if (!BCrypt.Net.BCrypt.Verify(password, account?.StoredHashedPassword ?? _config["Auth.DummyHash"]))
         {
             return new LoginResult { Success = false, Message = "INVALID CREDENTIALS" };
         }
 
-        reader.Close();
-
-        if (!BCrypt.Net.BCrypt.Verify(password, stored_hash))
+        if (account.TwoFactorSecret != null)
         {
-            return new LoginResult { Success = false, Message = "INVALID CREDENTIALS" };
-        }
+            var tokenBytes = new byte[32];
+            RandomNumberGenerator.Fill(tokenBytes);
+            var token = Convert.ToBase64String(tokenBytes);
 
-        if (twoFactorSecret != null)
-        {
-            var token = _jwtService.GenerateToken(id, email, role, "pending", 5);
-            var redirectUrl = _config["Auth:TwoFactorRedirectUrl"];
+            var expiresAt = DateTime.UtcNow.AddMinutes(5);
+
+            using (var insertCmd = new MySqlCommand(@"
+                INSERT INTO tfa_login_request (token, account_id, expires_at, used)
+                VALUES (@token, @AccountId, @expiresAt, 0)
+            ", conn))
+            {
+                insertCmd.Parameters.AddWithValue("@token", token);
+                insertCmd.Parameters.AddWithValue("@AccountId", account.Id);
+                insertCmd.Parameters.AddWithValue("@expiresAt", expiresAt);
+
+                await insertCmd.ExecuteNonQueryAsync();
+            }
+
+            // escape sequence the token before sending it in the URL
+            var baseRedirectUrl = _config["Auth.TwoFactorRedirectUrl"] ?? "/verify-2fa";
+            var redirectUrl = $"{baseRedirectUrl}?token={Uri.EscapeDataString(token)}";
 
             return new LoginResult
             {
                 Success = true,
-                Token = token,
                 RedirectUrl = redirectUrl,
                 Message = "2FA REQUIRED"
             };
         }
 
-        var finalToken = _jwtService.GenerateToken(id, email, role, "verified", 5);
+        var finalToken = _jwtService.GenerateToken(account.Id, account.Email, account.Role, 5);
 
-        using var updateCmd = new MySqlCommand("UPDATE accounts SET last_login = NOW() WHERE email = @email", conn);
-        updateCmd.Parameters.AddWithValue("@email", email);
+        using var updateCmd = new MySqlCommand("UPDATE accounts SET last_login = NOW() WHERE id = @Id", conn);
+        updateCmd.Parameters.AddWithValue("@Id", account.Id);
         await updateCmd.ExecuteNonQueryAsync();
 
         return new LoginResult

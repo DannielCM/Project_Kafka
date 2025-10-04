@@ -10,7 +10,7 @@ using System.Text;
 using Confluent.Kafka;
 using Microsoft.Extensions.DependencyInjection;
 using CaptchaGen.NetCore;
-using MyAuthenticationBackend.AppServices;
+using MyAuthenticationBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +25,7 @@ if (connStr == null)
 builder.Services.AddSingleton(new DbHelper(connStr));
 builder.Services.AddSingleton<JwtServices>();
 builder.Services.AddSingleton<UserServices>();
+builder.Services.AddSingleton<CaptchaServices>();
 builder.Services.AddSingleton<KafkaProducerService>();
 builder.Services.AddScoped<AuthenticationServices>();
 builder.Services.AddMemoryCache();
@@ -77,15 +78,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             }
         };
     });
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("Require2FAPending", policy => policy.RequireClaim("twofactor", "pending"));
-    options.AddPolicy("Require2FAVerified", policy => policy.RequireClaim("twofactor", "verified"));
-});
+builder.Services.AddAuthorization();
 
 var server = builder.Build();
-
 server.UseCors("AllowAll");
+server.UseAuthentication();
+server.UseAuthorization();
 
 // routes
 server.MapGet("/", (string? user = "user") => // default route
@@ -105,5 +103,6 @@ server.MapGet("/protected-endpoint", [Authorize(Roles = "admin")] (HttpContext c
 });
 server.MapAuthEndpoints();
 server.MapAPIEndpoints();
+server.MapUserEndpoints();
 
 server.Run();

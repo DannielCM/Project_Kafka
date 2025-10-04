@@ -11,7 +11,7 @@ public static class APIEndpoints
     {
         var group = server.MapGroup("/api/extapi").WithTags("API");
         
-        group.MapGet("/my-anime-list/anime/season/{year}/{season}", [Authorize(Policy = "Require2FAVerified")] async (IConfiguration config, int year, string season, [FromQuery] int limit = 10) =>
+        group.MapGet("/my-anime-list/anime/season/{year}/{season}", [Authorize] async (IConfiguration config, int year, string season, [FromQuery] int limit = 10) =>
         {
             try
             {

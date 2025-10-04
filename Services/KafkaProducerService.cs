@@ -1,6 +1,6 @@
 using Confluent.Kafka;
 
-namespace MyAuthenticationBackend.AppServices;
+namespace MyAuthenticationBackend.Services;
 public class KafkaProducerService
 {
     private readonly IProducer<Null, string> _producer;

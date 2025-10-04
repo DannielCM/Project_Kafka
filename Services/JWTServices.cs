@@ -4,7 +4,7 @@ using System.Security.Claims;
 using System.Text;
 
 // for more modular approach... If I have time for testing then move to this!
-namespace MyAuthenticationBackend.AppServices;
+namespace MyAuthenticationBackend.Services;
 public class JwtServices
 {
     private readonly IConfiguration _config;
@@ -14,14 +14,13 @@ public class JwtServices
         _config = config;
     }
 
-    public string GenerateToken(int userId, string email, string role, string twofaStatus, int minutes = 5)
+    public string GenerateToken(int userId, string email, string role, int minutes = 5)
     {
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim(ClaimTypes.Email, email),
             new Claim(ClaimTypes.Role, role),
-            new Claim("twofactor", twofaStatus)
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));

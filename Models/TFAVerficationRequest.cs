@@ -1,5 +1,6 @@
 namespace AuthenticationBackend.Endpoints;
 public class TFAVerificationRequest
 {
-    public required string Token { get; set; }
+    public string Token { get; set; } = "";
+    public string Code { get; set; } = "";
 }
