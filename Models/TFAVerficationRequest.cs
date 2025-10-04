@@ -1,4 +1,4 @@
-namespace AuthenticationBackend.Endpoints;
+namespace MyAuthenticationBackend.Models;
 public class TFAVerificationRequest
 {
     public string Token { get; set; } = "";
