@@ -6,5 +6,6 @@ namespace MyAuthenticationBackend.Models
         public string? Token { get; set; }
         public string? RedirectUrl { get; set; }
         public string Message { get; set; } = "";
+        public Account Account { get; set; } = new Account();
     }
 }

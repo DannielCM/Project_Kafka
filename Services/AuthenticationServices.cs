@@ -113,7 +113,8 @@ public class AuthenticationServices
         {
             Success = true,
             Token = finalToken,
-            Message = "LOGIN SUCCESSFUL"
+            Message = "LOGIN SUCCESSFUL",
+            Account = new Account { Id = account.Id, Email = account.Email }
         };
     }
 

@@ -22,7 +22,7 @@ public static class AuthEndpoints
 
         group.MapGet("/", () => "authentication route");
 
-        group.MapPost("/login", async (IMemoryCache cache, AuthenticationServices authService, LogInRequest request, CaptchaServices captchaServices) =>
+        group.MapPost("/login", async (IMemoryCache cache, KafkaProducerService kafkaProducerService, AuthenticationServices authService, LogInRequest request, CaptchaServices captchaServices) =>
         {
             var email = request.Email.Trim().ToLower();
             var password = request.Password.Trim();
@@ -43,11 +43,17 @@ public static class AuthEndpoints
                     return Results.BadRequest(new { message = result.Message ?? "LOGIN FAILED!" });
                 }
 
-                // disable kafka service for now as it may cause problems.
-                // kafka service
-                //kafkaService.SendLoginMessage(id);
+                if (!string.IsNullOrEmpty(result.RedirectUrl))
+                {
+                    // 2FA required
+                    return Results.Json(new { message = result.Message ?? "2FA REQUIRED", redirectUrl = result.RedirectUrl }, statusCode: 200);
+                }
+
                 cache.Remove(captchaId);
-                return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = result.Token, redirectUrl = result.RedirectUrl }, statusCode: 200);
+
+                kafkaProducerService.SendLoginMessage($"{ result.Account.Id}");
+
+                return Results.Json(new { message = "LOGIN SUCCESSFUL!", token = result.Token }, statusCode: 200);
             }
             catch (Exception ex)
             {
@@ -214,7 +220,7 @@ public static class AuthEndpoints
         });
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
-        group.MapPost("/2fa/verify", async (DbHelper dbHelper, HttpContext httpContext, JwtServices jwtService, TFAVerificationRequest request) =>
+        group.MapPost("/2fa/verify", async (DbHelper dbHelper, HttpContext httpContext, KafkaProducerService kafkaProducerService, JwtServices jwtService, TFAVerificationRequest request) =>
         {
             if (string.IsNullOrWhiteSpace(request.Token))
             {
@@ -325,6 +331,8 @@ public static class AuthEndpoints
                 updateLoginCmd.Parameters.AddWithValue("@Id", account.Id);
                 await updateLoginCmd.ExecuteNonQueryAsync();
             }
+
+            kafkaProducerService.SendLoginMessage($"{account.Id}");
 
             return Results.Json(new { message = "2FA VERIFICATION SUCCESSFUL!", token = token }, statusCode: 200);
         });
