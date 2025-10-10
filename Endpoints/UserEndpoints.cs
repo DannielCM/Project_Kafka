@@ -6,7 +6,8 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using BackendAuthentication;
 using Microsoft.AspNetCore.Authorization;
-
+using System.Security.Claims;
+using MySql.Data.MySqlClient;
 namespace AuthenticationBackend.Endpoints;
 public static class UserEndpoints
 {
@@ -141,7 +142,7 @@ public static class UserEndpoints
                 var connection = dbHelper.GetConnection();
                 await connection.OpenAsync();
 
-                var result = dbHelper.BulkInsertStudents(successList, connection);
+                var result = await dbHelper.BulkInsertStudentsAsync(successList, connection);
 
                 insertResults.AddRange(result.inserted);
 
@@ -181,6 +182,55 @@ public static class UserEndpoints
                 success = insertResults,
                 failures = failureList
             });
+        });
+
+        // Too cluttered here. Maybe move to its own service later if I have time.
+        group.MapGet("/me", [Authorize] async (HttpContext context, DbHelper dbHelper) =>
+        {
+            var identifierClaim = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(identifierClaim) || !int.TryParse(identifierClaim, out int userId))
+                return Results.Unauthorized();
+
+            using var conn = dbHelper.GetConnection();
+            await conn.OpenAsync();
+
+            var sql = @"
+                SELECT
+                    a.id,
+                    a.email,
+                    a.last_login,
+                    a.created_at,
+                    u.first_name,
+                    u.middle_name,
+                    u.last_name
+                FROM accounts a
+                JOIN users u ON a.id = u.account_id
+                WHERE a.id = @UserId
+                LIMIT 1;
+            ";
+
+            using var cmd = new MySqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@UserId", userId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return Results.NotFound(new { message = "User not found" });
+            }
+
+            var user = new User
+            {
+                Id = reader.GetInt32(reader.GetOrdinal("id")),
+                Email = reader.GetString(reader.GetOrdinal("email")),
+                LastLogin = reader.IsDBNull(reader.GetOrdinal("last_login")) ? null : reader.GetDateTime(reader.GetOrdinal("last_login")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at")),
+                FirstName = reader.GetString(reader.GetOrdinal("first_name")),
+                MiddleName = reader.IsDBNull(reader.GetOrdinal("middle_name")) ? "" : reader.GetString(reader.GetOrdinal("middle_name")),
+                LastName = reader.GetString(reader.GetOrdinal("last_name"))
+            };
+
+            return Results.Ok(new { message = "Success", user });
         });
     }
 }
