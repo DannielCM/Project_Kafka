@@ -61,10 +61,29 @@ CREATE TABLE `students` (
   `name` varchar(45) NOT NULL,
   `middle_name` varchar(45) DEFAULT NULL,
   `surname` varchar(45) NOT NULL,
-  `date_of_birth` datetime NOT NULL,
+  `date_of_birth` datetime DEFAULT NULL,
+  `year_level` varchar(20) NOT NULL,
+  `section` varchar(50) DEFAULT NULL,
+  `email` varchar(100) DEFAULT NULL,
+  `phone_number` varchar(20) DEFAULT NULL,
+  `address` text,
+  `gender` varchar(10) NOT NULL,
+  `nationality` varchar(50) DEFAULT NULL,
+  `religion` varchar(50) DEFAULT NULL,
+  `civil_status` varchar(20) NOT NULL,
+  `guardian_name` varchar(100) DEFAULT NULL,
+  `guardian_contact` varchar(20) DEFAULT NULL,
+  `emergency_contact` varchar(20) DEFAULT NULL,
+  `admission_date` date DEFAULT NULL,
+  `graduation_date` date DEFAULT NULL,
+  `gpa` decimal(3,2) DEFAULT NULL,
+  `status` varchar(20) NOT NULL,
+  `scholarship` varchar(50) DEFAULT NULL,
+  `remarks` text,
+  `student_type` varchar(30) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `student_id_UNIQUE` (`student_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -73,7 +92,7 @@ CREATE TABLE `students` (
 
 LOCK TABLES `students` WRITE;
 /*!40000 ALTER TABLE `students` DISABLE KEYS */;
-INSERT INTO `students` VALUES (1,'1001','Computer Science','John','','Doe','2000-05-15 00:00:00'),(2,'1005','Data Science','Tom','','Adams','2002-01-05 00:00:00'),(3,'1007','Animation','Lisa','','Simpson','2003-04-12 00:00:00'),(4,'1009','Photography','Peter','','Parker','2001-01-01 00:00:00');
+INSERT INTO `students` VALUES (10,'1001','Computer Science','John','','Doe','2000-05-15 00:00:00','3','Section A','john.doe@example.com','09171234567','123 Main St','Male','Filipino','Christian','Single','Robert Doe','09179876543','09171112233','2018-06-01','2022-05-15',3.50,'Active','None','Excellent student','Regular'),(11,'1005','Data Science','Tom','','Adams','2002-01-05 00:00:00','1','Section E','tom.adams@example.com','09175678901','654 Birch St','Male','Filipino','Christian','Single','Michael Adams','09177778899','09178889900','2020-06-01','2024-05-15',3.20,'Active','None','Average performance','Regular'),(12,'1007','Animation','Lisa','','Simpson','2003-04-12 00:00:00','1','Section G','lisa.simpson@example.com','09177890123','246 Walnut St','Female','Filipino','Christian','Single','David Simpson','09172223344','09173334455','2021-06-01','2025-05-15',3.60,'Active','None','Creative student','Regular'),(13,'1009','Photography','Peter','','Parker','2001-01-01 00:00:00','2','Section I','parker@example.com','09179012345','864 Elm St','Male','Filipino','Christian','Single','Richard Parker','09176667788','09177778899','2019-06-01','2023-05-15',3.10,'Active','None','Creative','Regular');
 /*!40000 ALTER TABLE `students` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -117,4 +136,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-09 18:33:20
+-- Dump completed on 2025-10-10 12:16:53
