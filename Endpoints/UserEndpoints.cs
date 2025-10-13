@@ -221,7 +221,7 @@ public static class UserEndpoints
 
             var user = new User
             {
-                Id = reader.GetInt32(reader.GetOrdinal("id")),
+                AccountId = reader.GetInt32(reader.GetOrdinal("id")),
                 Email = reader.GetString(reader.GetOrdinal("email")),
                 LastLogin = reader.IsDBNull(reader.GetOrdinal("last_login")) ? null : reader.GetDateTime(reader.GetOrdinal("last_login")),
                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("created_at")),
