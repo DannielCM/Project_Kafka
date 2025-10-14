@@ -1,6 +1,6 @@
 namespace MyAuthenticationBackend.Models
 {
-    public class StudentCSVModel
+    public class StudentResult
     {
         // Required / essential
         public string StudentId { get; set; } = "";

@@ -60,7 +60,7 @@ public static class AuthEndpoints
             }
         });
 
-        group.MapPost("/register", async (DbHelper dbHelper, AuthenticationServices authService, RegisterRequest request) =>
+        group.MapPost("/register", async (AuthenticationServices authService, RegisterRequest request) =>
         {
             try
             {
@@ -83,7 +83,7 @@ public static class AuthEndpoints
             }
         });
 
-        group.MapPost("/change-password", [Authorize] async (DbHelper dbHelper, HttpContext httpContext, UserServices userServices, ResetPasswordRequest request) =>
+        group.MapPost("/change-password", [Authorize] async (HttpContext httpContext, UserServices userServices, ResetPasswordRequest request) =>
         {
             var currentPassword = string.IsNullOrWhiteSpace(request.CurrentPassword) ? "" : request.CurrentPassword.Trim();
             var newPassword = string.IsNullOrWhiteSpace(request.NewPassword) ? "" : request.NewPassword.Trim();
@@ -164,7 +164,7 @@ public static class AuthEndpoints
         });
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
-        group.MapPost("/2fa/setup", [Authorize] async (IConfiguration config, DbHelper dbHelper, HttpContext httpContext, AuthenticationServices authService, TFASetupRequest request) =>
+        group.MapPost("/2fa/setup", [Authorize] async (HttpContext httpContext, AuthenticationServices authService, TFASetupRequest request) =>
         {
             var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
             var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -193,7 +193,7 @@ public static class AuthEndpoints
         });
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
-        group.MapPost("/2fa/verify", async (DbHelper dbHelper, KafkaProducerService kafkaProducerService, AuthenticationServices authService, JwtServices jwtService, TFAVerificationRequest request) =>
+        group.MapPost("/2fa/verify", async (KafkaProducerService kafkaProducerService, AuthenticationServices authService, JwtServices jwtService, TFAVerificationRequest request) =>
         {
             try
             {

@@ -69,9 +69,9 @@ public class DbHelper
                 cmd.Parameters.AddWithValue("@GuardianName", student.GuardianName ?? "");
                 cmd.Parameters.AddWithValue("@GuardianContact", student.GuardianContact ?? "");
                 cmd.Parameters.AddWithValue("@EmergencyContact", student.EmergencyContact ?? "");
-                cmd.Parameters.AddWithValue("@AdmissionDate", student.AdmissionDate ?? "");
-                cmd.Parameters.AddWithValue("@GraduationDate", student.GraduationDate ?? "");
-                cmd.Parameters.AddWithValue("@GPA", student.GPA ?? "");
+                cmd.Parameters.AddWithValue("@AdmissionDate", (student.AdmissionDate == null) ? DBNull.Value : student.AdmissionDate);
+                cmd.Parameters.AddWithValue("@GraduationDate", (student.GraduationDate == null) ? DBNull.Value : student.GraduationDate);
+                cmd.Parameters.AddWithValue("@GPA", (student.GPA <= 0) ? DBNull.Value : student.GPA);
                 cmd.Parameters.AddWithValue("@Status", student.Status ?? "");
                 cmd.Parameters.AddWithValue("@Scholarship", student.Scholarship ?? "");
                 cmd.Parameters.AddWithValue("@Remarks", student.Remarks ?? "");

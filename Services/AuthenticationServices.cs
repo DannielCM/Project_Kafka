@@ -21,6 +21,7 @@ public class AuthenticationServices
         _jwtService = jwtService;
     }
 
+
     public async Task<LoginResult> AuthenticateUser(string email, string password)
     {
         email = email?.Trim() ?? "";
@@ -67,7 +68,7 @@ public class AuthenticationServices
             }
         }
 
-        if (!BCrypt.Net.BCrypt.Verify(password, account?.StoredHashedPassword ?? _config["Auth.DummyHash"]))
+        if (!BCrypt.Net.BCrypt.Verify(password, account?.StoredHashedPassword ?? _config["Auth:DummyHash"]))
         {
             return new LoginResult
             {
@@ -96,7 +97,7 @@ public class AuthenticationServices
                 await insertCmd.ExecuteNonQueryAsync();
             }
 
-            var baseRedirectUrl = _config["Auth.TwoFactorRedirectUrl"] ?? "/verify-2fa";
+            var baseRedirectUrl = _config["Auth:TwoFactorRedirectUrl"] ?? "/verify-2fa";
             var redirectUrl = $"{baseRedirectUrl}?token={Uri.EscapeDataString(token)}";
 
             return new LoginResult
