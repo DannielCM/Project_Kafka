@@ -109,7 +109,7 @@ public class AuthenticationServices
         }
 
         // Generate JWT token
-        var finalToken = _jwtService.GenerateToken(account!.Id, account.Email, account.Role, 5);
+        var finalToken = _jwtService.GenerateToken(account!.Id, account.Email, account.Role, 60);
 
         const string updateQuery = "UPDATE accounts SET last_login = NOW() WHERE id = @Id";
         await using (var updateCmd = new MySqlCommand(updateQuery, conn))
