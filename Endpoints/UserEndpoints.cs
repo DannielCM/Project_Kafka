@@ -9,6 +9,7 @@ using BackendAuthentication;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using MySql.Data.MySqlClient;
+using System.Reflection;
 namespace AuthenticationBackend.Endpoints;
 public static class UserEndpoints
 {
@@ -16,16 +17,13 @@ public static class UserEndpoints
     {
         var group = server.MapGroup("/api/user").DisableAntiforgery();
 
-        // perhaps make it modularized later if I have time.
-        group.MapPost("/csv/student/upload", [Authorize] async (IFormFile? file, DbHelper dbHelper) =>
+        group.MapPost("/csv/students/upload", [Authorize] async (IFormFile? file) =>
         {
             if (file == null || file.Length == 0)
+            {
                 return Results.BadRequest(new { message = "No file uploaded" });
+            }
 
-            var successList = new List<StudentModel>();
-            var failureList = new List<StudentResult>();
-
-            List<StudentModel> records;
             try
             {
                 using var reader = new StreamReader(file.OpenReadStream());
@@ -34,153 +32,218 @@ public static class UserEndpoints
                     TrimOptions = TrimOptions.Trim,
                     IgnoreBlankLines = true
                 });
-                records = csv.GetRecords<StudentModel>().ToList();
-            }
-            catch (TypeConverterException ex)
-            {
-                return Results.BadRequest(new { message = "CSV format is invalid: " + ex.Message });
-            }
-            catch (HeaderValidationException ex)
-            {
-                return Results.BadRequest(new { message = "CSV header is invalid: " + ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return Results.BadRequest(new { message = "Error reading CSV file: " + ex.Message });
-            }
 
-            foreach (var record in records)
-            {
-                var validationErrors = new List<string>();
-
-                // Validate required fields
-                if (string.IsNullOrWhiteSpace(record.StudentId))
-                    validationErrors.Add("StudentId is missing");
-                else if (!long.TryParse(record.StudentId, out _))
-                    validationErrors.Add("StudentId must be numeric");
-
-                if (string.IsNullOrWhiteSpace(record.Name))
-                    validationErrors.Add("First Name is missing");
-
-                if (string.IsNullOrWhiteSpace(record.Surname))
-                    validationErrors.Add("Last Name is missing");
-
-                if (record.DateOfBirth == null)
-                    validationErrors.Add("DateOfBirth is missing or invalid");
-
-                if (string.IsNullOrWhiteSpace(record.Course))
-                    validationErrors.Add("Course is missing");
-
-                if (string.IsNullOrWhiteSpace(record.Gender))
-                    validationErrors.Add("Gender is missing");
-
-                if (string.IsNullOrWhiteSpace(record.CivilStatus))
-                    validationErrors.Add("Civil Status is missing");
-
-                if (string.IsNullOrWhiteSpace(record.YearLevel))
-                    validationErrors.Add("YearLevel is missing");
-
-                if (record.PhoneNumber?.Length > 20) // Arbitrary length limit
-                    validationErrors.Add("PhoneNumber is too long");
-
-                if (record.EmergencyContact?.Length > 20) // Arbitrary length limit
-                    validationErrors.Add("EmergencyContact is too long");
-
-                if (record.GuardianContact?.Length > 20) // Arbitrary length limit
-                    validationErrors.Add("GuardianContact is too long");
-
-                if (!long.TryParse(record.PhoneNumber, out _)) // Basic numeric check
-                    validationErrors.Add("PhoneNumber must be numeric");
-
-                if (!long.TryParse(record.EmergencyContact, out _)) // Basic numeric check
-                    validationErrors.Add("EmergencyContact must be numeric");
-
-                if (!long.TryParse(record.GuardianContact, out _)) // Basic numeric check
-                    validationErrors.Add("GuardianContact must be numeric");
-
-                if (validationErrors.Count > 0)
+                var map = new Dictionary<string, string>()
                 {
-                    failureList.Add(new StudentResult
+                    // Primary Identifier
+                    ["studentid"] = "StudentId",
+                    ["id"] = "StudentId",
+
+                    // Personal Information
+                    ["name"] = "Name",
+                    ["full name"] = "Name",
+                    ["f name"] = "Name",
+                    ["middlename"] = "MiddleName",
+                    ["middle name"] = "MiddleName",
+                    ["surname"] = "Surname",
+                    ["last name"] = "Surname",
+                    ["dob"] = "DateOfBirth",
+                    ["dateofbirth"] = "DateOfBirth",
+                    ["gender"] = "Gender",
+                    ["civilstatus"] = "CivilStatus",
+                    ["civil status"] = "CivilStatus",
+                    ["nationality"] = "Nationality",
+                    ["religion"] = "Religion",
+                    ["bloodtype"] = "BloodType",
+                    ["blood type"] = "BloodType",
+
+                    // Academic Information
+                    ["course"] = "Course",
+                    ["yearlevel"] = "YearLevel",
+                    ["year level"] = "YearLevel",
+                    ["section"] = "Section",
+                    ["gpa"] = "GPA",
+                    ["status"] = "Status",
+                    ["scholarship"] = "Scholarship",
+                    ["remarks"] = "Remarks",
+                    ["studenttype"] = "StudentType",
+                    ["student type"] = "StudentType",
+                    ["lastenrolledsemester"] = "LastEnrolledSemester",
+                    ["last enrolled semester"] = "LastEnrolledSemester",
+
+                    // Contact Information
+                    ["email"] = "Email",
+                    ["phonenumber"] = "PhoneNumber",
+                    ["phone number"] = "PhoneNumber",
+                    ["address"] = "Address",
+
+                    // Family / Guardian
+                    ["guardianname"] = "GuardianName",
+                    ["guardian name"] = "GuardianName",
+                    ["guardiancontact"] = "GuardianContact",
+                    ["guardian contact"] = "GuardianContact",
+                    ["emergencycontact"] = "EmergencyContact",
+                    ["emergency contact"] = "EmergencyContact",
+
+                    // Dates
+                    ["admissiondate"] = "AdmissionDate",
+                    ["admission date"] = "AdmissionDate",
+                    ["graduationdate"] = "GraduationDate",
+                    ["graduation date"] = "GraduationDate"
+                };
+
+                await csv.ReadAsync();
+                csv.ReadHeader();
+                var csvHeaders = csv.HeaderRecord;
+                var students = new List<StudentModel>();
+                var studentPropertyCache = typeof(StudentModel).GetProperties().ToDictionary(p => p.Name, p => p);
+
+                // iterate through each record
+                while (await csv.ReadAsync())
+                {
+                    if (csvHeaders == null)
                     {
-                        StudentId = record.StudentId,
-                        Name = record.Name,
-                        Surname = record.Surname,
-                        MiddleName = record.MiddleName ?? "",
-                        DateOfBirth = record.DateOfBirth?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-                        Course = record.Course,
-                        Gender = record.Gender,
-                        CivilStatus = record.CivilStatus,
-                        YearLevel = record.YearLevel ?? "",
-                        Section = record.Section ?? "",
-                        Email = record.Email ?? "",
-                        PhoneNumber = record.PhoneNumber ?? "",
-                        Address = record.Address ?? "",
-                        Nationality = record.Nationality ?? "",
-                        Religion = record.Religion ?? "",
-                        GuardianName = record.GuardianName ?? "",
-                        GuardianContact = record.GuardianContact ?? "",
-                        EmergencyContact = record.EmergencyContact ?? "",
-                        AdmissionDate = record.AdmissionDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-                        GraduationDate = record.GraduationDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-                        GPA = record.GPA.ToString() ?? "",
-                        Status = record.Status ?? "",
-                        Scholarship = record.Scholarship ?? "",
-                        Remarks = record.Remarks ?? "",
-                        StudentType = record.StudentType ?? "",
-                        Errors = validationErrors
-                    });
+                        return Results.BadRequest(new { message = "CSV headers are missing" });
+                    }
+
+                    // create a new student object for each record
+                    var student = new StudentModel();
+                    var validationErrors = new List<string>();
+
+                    // start mapping fields based on header names
+                    foreach (var header in csvHeaders)
+                    {
+                        var normalizedHeader = header.Replace(" ", "").ToLower();
+                        if (map.TryGetValue(normalizedHeader, out var propertyName))
+                        {
+                            if (studentPropertyCache.TryGetValue(propertyName, out var propertyInfo))
+                            {
+                                var headerValue = csv.GetField(header);
+
+                                // only validate fields that require validation
+                                if (propertyInfo.PropertyType == typeof(string))
+                                {
+                                    headerValue = headerValue?.Trim();
+
+                                    if (propertyInfo.Name == "Name" || propertyInfo.Name == "Surname")
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(headerValue) && Regex.IsMatch(headerValue, @"^[a-zA-Z\s'-]+$"))
+                                        {
+                                            propertyInfo.SetValue(student, headerValue);
+                                        }
+                                        else
+                                        {
+                                            validationErrors.Add($"{propertyName} cannot be empty and must contain only letters, spaces, apostrophes, or hyphens");
+                                        }
+                                    }
+                                    else if (propertyInfo.Name == "StudentId")
+                                    {
+                                        if (long.TryParse(headerValue, out _) && !string.IsNullOrWhiteSpace(headerValue))
+                                        {
+                                            propertyInfo.SetValue(student, headerValue);
+                                        }
+                                        else
+                                        {
+                                            validationErrors.Add($"{propertyName} cannot be empty and must be numeric");
+                                        }
+                                    }
+                                    else if (propertyInfo.Name == "Gender")
+                                    {
+                                        var val = headerValue?.ToLower();
+                                        if (val == "male" || val == "female")
+                                        {
+                                            propertyInfo.SetValue(student, val);
+                                        }
+                                        else
+                                        {
+                                            validationErrors.Add($"{propertyName} must be 'male' or 'female'");
+                                        }
+                                    }
+                                    else if (propertyInfo.Name == "PhoneNumber")
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(headerValue) && long.TryParse(headerValue, out _) && headerValue.Length == 11 && headerValue.StartsWith("09"))
+                                        {
+                                            propertyInfo.SetValue(student, headerValue);
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(headerValue))
+                                        {
+                                            validationErrors.Add($"{propertyName} must be numeric, 11 digits, starting with '09'");
+                                        }
+                                    }
+                                    else if (propertyInfo.Name == "Email")
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(headerValue) && headerValue.Contains("@") && headerValue.Contains("."))
+                                        {
+                                            propertyInfo.SetValue(student, headerValue);
+                                        }
+                                        else
+                                        {
+                                            propertyInfo.SetValue(student, headerValue);
+                                            validationErrors.Add($"{propertyName} is not valid");
+                                        }
+                                    }
+                                    else if (propertyInfo.Name == "GPA")
+                                    {
+                                        if (float.TryParse(headerValue, out var gpaValue))
+                                        {
+                                            if (gpaValue >= 0.0f && gpaValue <= 4.0f)
+                                            {
+                                                propertyInfo.SetValue(student, headerValue);
+                                            }
+                                            else
+                                            {
+                                                validationErrors.Add($"{propertyName} must be between 0.0 and 4.0");
+                                            }
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(headerValue))
+                                        {
+                                            validationErrors.Add($"{propertyName} must be a valid float number");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // set all other string fields without validation
+                                        propertyInfo.SetValue(student, headerValue);
+                                    }
+                                }
+                                else if (propertyInfo.PropertyType == typeof(DateTime?))
+                                {
+                                    if (DateTime.TryParse(headerValue, out var dateValue))
+                                    {
+                                        propertyInfo.SetValue(student, dateValue);
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(headerValue))
+                                    {
+                                        validationErrors.Add($"{propertyName} must be a valid date");
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                throw new Exception($"Property '{propertyName}' not found in StudentModel.");
+                            }
+                        }
+                        else
+                        {
+                            return Results.BadRequest(new { message = $"Unrecognized header: {header}" });
+                        }
+                    }
+
+                    if (validationErrors.Count > 0)
+                    {
+                        student.Errors = validationErrors;
+                    }
+
+                    students.Add(student);
                 }
-                else
-                {
-                    successList.Add(record);
-                }
+
+                return Results.Ok(new { message = "File processed successfully", results = students });
             }
-
-            var insertResults = new List<StudentModel>();
-            if (successList.Count > 0)
+            catch (Exception e)
             {
-                await using var connection = dbHelper.GetConnection();
-                await connection.OpenAsync();
-
-                var result = await dbHelper.BulkInsertStudentsAsync(successList, connection);
-                insertResults.AddRange(result.inserted);
-
-                result.skipped.ForEach(s => failureList.Add(new StudentResult
-                {
-                    StudentId = s.StudentId ?? "",
-                    Name = s.Name ?? "",
-                    Surname = s.Surname ?? "",
-                    MiddleName = s.MiddleName ?? "",
-                    DateOfBirth = s.DateOfBirth?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-                    Course = s.Course ?? "",
-                    Gender = s.Gender ?? "",
-                    CivilStatus = s.CivilStatus ?? "",
-                    YearLevel = s.YearLevel ?? "",
-                    Section = s.Section ?? "",
-                    Email = s.Email ?? "",
-                    PhoneNumber = s.PhoneNumber ?? "",
-                    Address = s.Address ?? "",
-                    Nationality = s.Nationality ?? "",
-                    Religion = s.Religion ?? "",
-                    GuardianName = s.GuardianName ?? "",
-                    GuardianContact = s.GuardianContact ?? "",
-                    EmergencyContact = s.EmergencyContact ?? "",
-                    AdmissionDate = s.AdmissionDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-                    GraduationDate = s.GraduationDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
-                    GPA = s.GPA.ToString() ?? "",
-                    Status = s.Status ?? "",
-                    Scholarship = s.Scholarship ?? "",
-                    Remarks = s.Remarks ?? "",
-                    StudentType = s.StudentType ?? "",
-                    Errors = new List<string> { "Duplicate StudentId" }
-                }));
+                Console.WriteLine(e.Message);
+                return Results.Problem("Internal Server Error");
             }
-
-            return Results.Ok(new
-            {
-                success = insertResults,
-                failures = failureList
-            });
         });
 
         // Too cluttered here. Maybe move to its own service later if I have time.
@@ -230,91 +293,6 @@ public static class UserEndpoints
             };
 
             return Results.Ok(new { message = "Success", user });
-        });
-
-        group.MapGet("/students", [Authorize] async (DbHelper dbHelper, HttpRequest request) =>
-        {
-            try
-            {
-                var connection = dbHelper.GetConnection();
-                await connection.OpenAsync();
-
-                // Get page and limit from query parameters
-                int page = int.TryParse(request.Query["page"], out var p) && p > 0 ? p : 1;
-                int limit = int.TryParse(request.Query["limit"], out var l) && l > 0 ? l : 10;
-                int offset = (page - 1) * limit;
-
-                List<StudentResult> students = new List<StudentResult>();
-
-                // Fetch only the current page
-                await using (var sql = new MySqlCommand("SELECT * FROM Students ORDER BY student_id DESC LIMIT @limit OFFSET @offset", connection))
-                {
-                    sql.Parameters.AddWithValue("@limit", limit);
-                    sql.Parameters.AddWithValue("@offset", offset);
-
-                    await using (var reader = await sql.ExecuteReaderAsync())
-                    {
-                        while (await reader.ReadAsync())
-                        {
-                            var student = new StudentResult
-                            {
-                                StudentId = reader.IsDBNull(reader.GetOrdinal("student_id")) ? "" : reader.GetString(reader.GetOrdinal("student_id")),
-                                Name = reader.IsDBNull(reader.GetOrdinal("name")) ? "" : reader.GetString(reader.GetOrdinal("name")),
-                                Surname = reader.IsDBNull(reader.GetOrdinal("surname")) ? "" : reader.GetString(reader.GetOrdinal("surname")),
-                                DateOfBirth = reader.IsDBNull(reader.GetOrdinal("date_of_birth")) ? "" : reader.GetDateTime(reader.GetOrdinal("date_of_birth")).ToString("yyyy-MM-dd"),
-                                Course = reader.IsDBNull(reader.GetOrdinal("course")) ? "" : reader.GetString(reader.GetOrdinal("course")),
-                                Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? "" : reader.GetString(reader.GetOrdinal("gender")),
-                                CivilStatus = reader.IsDBNull(reader.GetOrdinal("civil_status")) ? "" : reader.GetString(reader.GetOrdinal("civil_status")),
-                                MiddleName = reader.IsDBNull(reader.GetOrdinal("middle_name")) ? "" : reader.GetString(reader.GetOrdinal("middle_name")),
-                                YearLevel = reader.IsDBNull(reader.GetOrdinal("year_level")) ? "" : reader.GetString(reader.GetOrdinal("year_level")),
-                                Section = reader.IsDBNull(reader.GetOrdinal("section")) ? "" : reader.GetString(reader.GetOrdinal("section")),
-                                Email = reader.IsDBNull(reader.GetOrdinal("email")) ? "" : reader.GetString(reader.GetOrdinal("email")),
-                                PhoneNumber = reader.IsDBNull(reader.GetOrdinal("phone_number")) ? "" : reader.GetString(reader.GetOrdinal("phone_number")),
-                                Address = reader.IsDBNull(reader.GetOrdinal("address")) ? "" : reader.GetString(reader.GetOrdinal("address")),
-                                Nationality = reader.IsDBNull(reader.GetOrdinal("nationality")) ? "" : reader.GetString(reader.GetOrdinal("nationality")),
-                                Religion = reader.IsDBNull(reader.GetOrdinal("religion")) ? "" : reader.GetString(reader.GetOrdinal("religion")),
-                                GuardianName = reader.IsDBNull(reader.GetOrdinal("guardian_name")) ? "" : reader.GetString(reader.GetOrdinal("guardian_name")),
-                                GuardianContact = reader.IsDBNull(reader.GetOrdinal("guardian_contact")) ? "" : reader.GetString(reader.GetOrdinal("guardian_contact")),
-                                EmergencyContact = reader.IsDBNull(reader.GetOrdinal("emergency_contact")) ? "" : reader.GetString(reader.GetOrdinal("emergency_contact")),
-                                AdmissionDate = reader.IsDBNull(reader.GetOrdinal("admission_date")) ? "" : reader.GetDateTime(reader.GetOrdinal("admission_date")).ToString("yyyy-MM-dd"),
-                                GraduationDate = reader.IsDBNull(reader.GetOrdinal("graduation_date")) ? "" : reader.GetDateTime(reader.GetOrdinal("graduation_date")).ToString("yyyy-MM-dd"),
-                                GPA = reader.IsDBNull(reader.GetOrdinal("gpa")) ? "" : reader.GetDouble(reader.GetOrdinal("gpa")).ToString("0.##"),
-                                Status = reader.IsDBNull(reader.GetOrdinal("status")) ? "" : reader.GetString(reader.GetOrdinal("status")),
-                                Scholarship = reader.IsDBNull(reader.GetOrdinal("scholarship")) ? "" : reader.GetString(reader.GetOrdinal("scholarship")),
-                                Remarks = reader.IsDBNull(reader.GetOrdinal("remarks")) ? "" : reader.GetString(reader.GetOrdinal("remarks")),
-                                StudentType = reader.IsDBNull(reader.GetOrdinal("student_type")) ? "" : reader.GetString(reader.GetOrdinal("student_type"))
-                            };
-
-                            students.Add(student);
-                        }
-                    }
-                }
-
-                // Get total count for pagination info using a separate command
-                int totalCount;
-                await using (var countCmd = new MySqlCommand("SELECT COUNT(*) FROM Students", connection))
-                {
-                    totalCount = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
-                }
-
-                int totalPages = (int)Math.Ceiling((double)totalCount / limit);
-
-                return Results.Ok(new
-                {
-                    students,
-                    page,
-                    totalPages,
-                    totalCount
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex);
-                return Results.Json(
-                    new { message = "Error retrieving students: " + ex.Message },
-                    statusCode: 500
-                );
-            }
         });
     }
 }

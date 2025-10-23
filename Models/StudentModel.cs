@@ -19,7 +19,7 @@ public class StudentModel
     public string Course { get; set; } = string.Empty;
     public string YearLevel { get; set; } = string.Empty;
     public string Section { get; set; } = string.Empty;
-    public float? GPA { get; set; }
+    public string GPA { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Scholarship { get; set; } = string.Empty;
     public string Remarks { get; set; } = string.Empty;
@@ -39,4 +39,7 @@ public class StudentModel
     // Dates
     public DateTime? AdmissionDate { get; set; }
     public DateTime? GraduationDate { get; set; }
+
+    // Validation Errors
+    public List<string> Errors { get; set; } = new List<string>();
 }
