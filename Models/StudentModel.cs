@@ -5,10 +5,10 @@ public class StudentModel
     public string StudentId { get; set; } = string.Empty;
 
     // Personal Information
-    public string Name { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
     public string MiddleName { get; set; } = string.Empty;
-    public string Surname { get; set; } = string.Empty;
-    public DateTime? DateOfBirth { get; set; }
+    public string SurName { get; set; } = string.Empty;
+    public string? DateOfBirth { get; set; }
     public string Gender { get; set; } = string.Empty;
     public string CivilStatus { get; set; } = string.Empty;
     public string Nationality { get; set; } = string.Empty;
@@ -37,8 +37,8 @@ public class StudentModel
     public string EmergencyContact { get; set; } = string.Empty;
 
     // Dates
-    public DateTime? AdmissionDate { get; set; }
-    public DateTime? GraduationDate { get; set; }
+    public string? AdmissionDate { get; set; }
+    public string? GraduationDate { get; set; }
 
     // Validation Errors
     public List<string> Errors { get; set; } = new List<string>();

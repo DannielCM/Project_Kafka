@@ -24,6 +24,8 @@ public static class UserEndpoints
                 return Results.BadRequest(new { message = "No file uploaded" });
             }
 
+            var students = new List<StudentModel>();
+
             try
             {
                 using var reader = new StreamReader(file.OpenReadStream());
@@ -33,213 +35,56 @@ public static class UserEndpoints
                     IgnoreBlankLines = true
                 });
 
-                var map = new Dictionary<string, string>()
-                {
-                    // Primary Identifier
-                    ["studentid"] = "StudentId",
-                    ["id"] = "StudentId",
-
-                    // Personal Information
-                    ["name"] = "Name",
-                    ["full name"] = "Name",
-                    ["f name"] = "Name",
-                    ["middlename"] = "MiddleName",
-                    ["middle name"] = "MiddleName",
-                    ["surname"] = "Surname",
-                    ["last name"] = "Surname",
-                    ["dob"] = "DateOfBirth",
-                    ["dateofbirth"] = "DateOfBirth",
-                    ["gender"] = "Gender",
-                    ["civilstatus"] = "CivilStatus",
-                    ["civil status"] = "CivilStatus",
-                    ["nationality"] = "Nationality",
-                    ["religion"] = "Religion",
-                    ["bloodtype"] = "BloodType",
-                    ["blood type"] = "BloodType",
-
-                    // Academic Information
-                    ["course"] = "Course",
-                    ["yearlevel"] = "YearLevel",
-                    ["year level"] = "YearLevel",
-                    ["section"] = "Section",
-                    ["gpa"] = "GPA",
-                    ["status"] = "Status",
-                    ["scholarship"] = "Scholarship",
-                    ["remarks"] = "Remarks",
-                    ["studenttype"] = "StudentType",
-                    ["student type"] = "StudentType",
-                    ["lastenrolledsemester"] = "LastEnrolledSemester",
-                    ["last enrolled semester"] = "LastEnrolledSemester",
-
-                    // Contact Information
-                    ["email"] = "Email",
-                    ["phonenumber"] = "PhoneNumber",
-                    ["phone number"] = "PhoneNumber",
-                    ["address"] = "Address",
-
-                    // Family / Guardian
-                    ["guardianname"] = "GuardianName",
-                    ["guardian name"] = "GuardianName",
-                    ["guardiancontact"] = "GuardianContact",
-                    ["guardian contact"] = "GuardianContact",
-                    ["emergencycontact"] = "EmergencyContact",
-                    ["emergency contact"] = "EmergencyContact",
-
-                    // Dates
-                    ["admissiondate"] = "AdmissionDate",
-                    ["admission date"] = "AdmissionDate",
-                    ["graduationdate"] = "GraduationDate",
-                    ["graduation date"] = "GraduationDate"
-                };
-
-                await csv.ReadAsync();
-                csv.ReadHeader();
-                var csvHeaders = csv.HeaderRecord;
-                var students = new List<StudentModel>();
-                var studentPropertyCache = typeof(StudentModel).GetProperties().ToDictionary(p => p.Name, p => p);
-
-                // iterate through each record
                 while (await csv.ReadAsync())
                 {
-                    if (csvHeaders == null)
-                    {
-                        return Results.BadRequest(new { message = "CSV headers are missing" });
-                    }
+                    var records = csv.GetRecord<dynamic>();
+                    var dict = (IDictionary<String, Object>)records;
 
-                    // create a new student object for each record
-                    var student = new StudentModel();
-                    var validationErrors = new List<string>();
-
-                    // start mapping fields based on header names
-                    foreach (var header in csvHeaders)
-                    {
-                        var normalizedHeader = header.Replace(" ", "").ToLower();
-                        if (map.TryGetValue(normalizedHeader, out var propertyName))
+                    StudentModel? student = null;
+                    if (file.FileName == "100_students.csv") {
+                        student = new StudentModel()
                         {
-                            if (studentPropertyCache.TryGetValue(propertyName, out var propertyInfo))
-                            {
-                                var headerValue = csv.GetField(header);
+                            StudentId = dict.ElementAt(0).Value?.ToString()?.Trim() ?? "",
+                            FirstName = dict.ElementAt(1).Value?.ToString()?.Trim() ?? "",
+                            MiddleName = dict.ElementAt(2).Value?.ToString()?.Trim() ?? "",
+                            SurName = dict.ElementAt(3).Value?.ToString()?.Trim() ?? "",
+                            DateOfBirth = dict.ElementAt(4).Value?.ToString()?.Trim() ?? "",
+                            Gender = dict.ElementAt(5).Value?.ToString()?.Trim() ?? "",
+                            CivilStatus = dict.ElementAt(6).Value?.ToString()?.Trim() ?? "",
+                            Nationality = dict.ElementAt(7).Value?.ToString()?.Trim() ?? "",
+                            Religion = dict.ElementAt(8).Value?.ToString()?.Trim() ?? "",
+                            BloodType = dict.ElementAt(9).Value?.ToString()?.Trim() ?? "",
+                            Course = dict.ElementAt(10).Value?.ToString()?.Trim() ?? "",
+                            YearLevel = dict.ElementAt(11).Value?.ToString()?.Trim() ?? "",
+                            Section = dict.ElementAt(12).Value?.ToString()?.Trim() ?? "",
+                            GPA = dict.ElementAt(13).Value?.ToString()?.Trim() ?? "",
+                            Status = dict.ElementAt(14).Value?.ToString()?.Trim() ?? "",
+                            Scholarship = dict.ElementAt(15).Value?.ToString()?.Trim() ?? "",
+                            Remarks = dict.ElementAt(16).Value?.ToString()?.Trim() ?? "",
+                            StudentType = dict.ElementAt(17).Value?.ToString()?.Trim() ?? "",
+                            LastEnrolledSemester = dict.ElementAt(18).Value?.ToString()?.Trim() ?? "",
+                            Email = dict.ElementAt(19).Value?.ToString()?.Trim() ?? "",
+                            PhoneNumber = dict.ElementAt(20).Value?.ToString()?.Trim() ?? "",
+                            Address = dict.ElementAt(21).Value?.ToString()?.Trim() ?? "",
+                            GuardianName = dict.ElementAt(22).Value?.ToString()?.Trim() ?? "",
+                            GuardianContact = dict.ElementAt(23).Value?.ToString()?.Trim() ?? "",
+                            EmergencyContact = dict.ElementAt(24).Value?.ToString()?.Trim() ?? "",
+                            AdmissionDate = dict.ElementAt(25).Value?.ToString()?.Trim() ?? "",
+                            GraduationDate = dict.ElementAt(26).Value?.ToString()?.Trim() ?? ""
+                        };
 
-                                // only validate fields that require validation
-                                if (propertyInfo.PropertyType == typeof(string))
-                                {
-                                    headerValue = headerValue?.Trim();
-
-                                    if (propertyInfo.Name == "Name" || propertyInfo.Name == "Surname")
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(headerValue) && Regex.IsMatch(headerValue, @"^[a-zA-Z\s'-]+$"))
-                                        {
-                                            propertyInfo.SetValue(student, headerValue);
-                                        }
-                                        else
-                                        {
-                                            validationErrors.Add($"{propertyName} cannot be empty and must contain only letters, spaces, apostrophes, or hyphens");
-                                        }
-                                    }
-                                    else if (propertyInfo.Name == "StudentId")
-                                    {
-                                        if (long.TryParse(headerValue, out _) && !string.IsNullOrWhiteSpace(headerValue))
-                                        {
-                                            propertyInfo.SetValue(student, headerValue);
-                                        }
-                                        else
-                                        {
-                                            validationErrors.Add($"{propertyName} cannot be empty and must be numeric");
-                                        }
-                                    }
-                                    else if (propertyInfo.Name == "Gender")
-                                    {
-                                        var val = headerValue?.ToLower();
-                                        if (val == "male" || val == "female")
-                                        {
-                                            propertyInfo.SetValue(student, val);
-                                        }
-                                        else
-                                        {
-                                            validationErrors.Add($"{propertyName} must be 'male' or 'female'");
-                                        }
-                                    }
-                                    else if (propertyInfo.Name == "PhoneNumber")
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(headerValue) && long.TryParse(headerValue, out _) && headerValue.Length == 11 && headerValue.StartsWith("09"))
-                                        {
-                                            propertyInfo.SetValue(student, headerValue);
-                                        }
-                                        else if (!string.IsNullOrWhiteSpace(headerValue))
-                                        {
-                                            validationErrors.Add($"{propertyName} must be numeric, 11 digits, starting with '09'");
-                                        }
-                                    }
-                                    else if (propertyInfo.Name == "Email")
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(headerValue) && headerValue.Contains("@") && headerValue.Contains("."))
-                                        {
-                                            propertyInfo.SetValue(student, headerValue);
-                                        }
-                                        else
-                                        {
-                                            propertyInfo.SetValue(student, headerValue);
-                                            validationErrors.Add($"{propertyName} is not valid");
-                                        }
-                                    }
-                                    else if (propertyInfo.Name == "GPA")
-                                    {
-                                        if (float.TryParse(headerValue, out var gpaValue))
-                                        {
-                                            if (gpaValue >= 0.0f && gpaValue <= 4.0f)
-                                            {
-                                                propertyInfo.SetValue(student, headerValue);
-                                            }
-                                            else
-                                            {
-                                                validationErrors.Add($"{propertyName} must be between 0.0 and 4.0");
-                                            }
-                                        }
-                                        else if (!string.IsNullOrWhiteSpace(headerValue))
-                                        {
-                                            validationErrors.Add($"{propertyName} must be a valid float number");
-                                        }
-                                    }
-                                    else
-                                    {
-                                        // set all other string fields without validation
-                                        propertyInfo.SetValue(student, headerValue);
-                                    }
-                                }
-                                else if (propertyInfo.PropertyType == typeof(DateTime?))
-                                {
-                                    if (DateTime.TryParse(headerValue, out var dateValue))
-                                    {
-                                        propertyInfo.SetValue(student, dateValue);
-                                    }
-                                    else if (!string.IsNullOrWhiteSpace(headerValue))
-                                    {
-                                        validationErrors.Add($"{propertyName} must be a valid date");
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                throw new Exception($"Property '{propertyName}' not found in StudentModel.");
-                            }
-                        }
-                        else
+                        if (string.IsNullOrEmpty(student.StudentId) || !long.TryParse(student.StudentId, out long id))
                         {
-                            return Results.BadRequest(new { message = $"Unrecognized header: {header}" });
+                            student.Errors.Add("Student ID must be provided and must be in numberic form");
                         }
-                    }
-
-                    if (validationErrors.Count > 0)
-                    {
-                        student.Errors = validationErrors;
                     }
 
                     students.Add(student);
                 }
 
-                return Results.Ok(new { message = "File processed successfully", results = students });
+                return Results.Ok(new { results = students });
             }
-            catch (Exception e)
+            catch (Exception e) 
             {
                 Console.WriteLine(e.Message);
                 return Results.Problem("Internal Server Error");

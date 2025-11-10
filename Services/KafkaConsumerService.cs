@@ -14,6 +14,7 @@ public class KafkaConsumerService : IHostedService
     {
         _configuration = configuration;
 
+        // use env value if possile. Change if I have time
         _config = new ConsumerConfig
         {
             BootstrapServers = "127.0.0.1:9092",
