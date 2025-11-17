@@ -13,22 +13,13 @@ public class UserServices
 		_dbHelper = dbHelper;
 	}
 
-	public async Task<PasswordResetResults> ChangePassword(int id, string currentPassword, string newPassword, string newPasswordConfirmation) {
-        if (string.IsNullOrEmpty(currentPassword.Trim()) || string.IsNullOrEmpty(newPassword.Trim()) || string.IsNullOrEmpty(newPasswordConfirmation.Trim()))
+	public async Task<PasswordResetResults> ChangePassword(int id, string currentPassword, string newPassword) {
+        if (string.IsNullOrEmpty(currentPassword.Trim()) || string.IsNullOrEmpty(newPassword.Trim()))
         {
             return new PasswordResetResults
             {
                 Success = false,
                 Message = "All password fields are required."
-            };
-        }
-
-        if (newPassword != newPasswordConfirmation)
-        {
-            return new PasswordResetResults
-            {
-                Success = false,
-                Message = "New password and confirmed password do not match."
             };
         }
 

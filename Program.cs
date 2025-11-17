@@ -9,6 +9,7 @@ using Confluent.Kafka;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using MyAuthenticationBackend.Models;
 using Microsoft.IdentityModel.Tokens;
 using MyAuthenticationBackend.Services;
 
@@ -23,6 +24,13 @@ builder.Services.AddSingleton(new DbHelper(connStr));
 builder.Services.AddSingleton<JwtServices>();
 builder.Services.AddSingleton<UserServices>();
 builder.Services.AddSingleton<CaptchaServices>();
+builder.Services.Configure<SmtpSettings>(
+    builder.Configuration.GetSection("SMTP")
+);
+builder.Services.AddSingleton<EmailService>();
+
+var section = builder.Configuration.GetSection("SMTP");
+Console.WriteLine($"SMTP Config - Host: {section["Host"]}, Port: {section["Port"]}, Username: {section["Username"]}");
 
 // Kafka services
 builder.Services.AddSingleton<KafkaProducerService>();

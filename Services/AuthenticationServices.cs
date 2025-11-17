@@ -13,14 +13,15 @@ public class AuthenticationServices
     private readonly DbHelper _dbHelper;
     private readonly IConfiguration _config;
     private readonly JwtServices _jwtService;
+    private readonly EmailService _emailService;
 
-    public AuthenticationServices(DbHelper dbHelper, IConfiguration config, JwtServices jwtService)
+    public AuthenticationServices(DbHelper dbHelper, IConfiguration config, JwtServices jwtService, EmailService emailService)
     {
         _dbHelper = dbHelper;
         _config = config;
         _jwtService = jwtService;
+        _emailService = emailService;
     }
-
 
     public async Task<LoginResult> AuthenticateUser(string email, string password)
     {
@@ -117,6 +118,12 @@ public class AuthenticationServices
             updateCmd.Parameters.AddWithValue("@Id", account.Id);
             await updateCmd.ExecuteNonQueryAsync();
         }
+
+        await _emailService.SendEmailAsync(
+            account.Email,
+            "New Login Detected",
+            $"A new login to your account was detected on {DateTime.UtcNow} UTC. If this wasn't you, please secure your account immediately."
+        );
 
         return new LoginResult
         {

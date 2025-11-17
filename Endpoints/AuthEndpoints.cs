@@ -87,14 +87,13 @@ public static class AuthEndpoints
         {
             var currentPassword = string.IsNullOrWhiteSpace(request.CurrentPassword) ? "" : request.CurrentPassword.Trim();
             var newPassword = string.IsNullOrWhiteSpace(request.NewPassword) ? "" : request.NewPassword.Trim();
-            var newPasswordConfirmation = string.IsNullOrWhiteSpace(request.NewPasswordConfirmation) ? "" : request.NewPasswordConfirmation.Trim();
 
             try
             {
                 var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 int.TryParse(userIdClaim, out int userId);
 
-                var result = await userServices.ChangePassword(userId, currentPassword, newPassword, newPasswordConfirmation);
+                var result = await userServices.ChangePassword(userId, currentPassword, newPassword);
 
                 if (!result.Success)
                 {
