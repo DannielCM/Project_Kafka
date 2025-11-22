@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using MySql.Data.MySqlClient;
 using System.Reflection;
+using System.Text.Json;
+
 namespace AuthenticationBackend.Endpoints;
 public static class UserEndpoints
 {
@@ -17,12 +19,14 @@ public static class UserEndpoints
     {
         var group = server.MapGroup("/api/user").DisableAntiforgery();
 
-        group.MapPost("/csv/students/upload", [Authorize] async (IFormFile? file) =>
+        group.MapPost("/csv/students/upload", async (IFormFile? file, [FromForm] string map) =>
         {
             if (file == null || file.Length == 0)
-            {
                 return Results.BadRequest(new { message = "No file uploaded" });
-            }
+
+            var mapping = JsonSerializer.Deserialize<Dictionary<string, string>>(map);
+            if (mapping == null)
+                return Results.BadRequest(new { message = "Invalid mapping object." });
 
             var students = new List<StudentModel>();
 
@@ -37,56 +41,118 @@ public static class UserEndpoints
 
                 while (await csv.ReadAsync())
                 {
-                    var records = csv.GetRecord<dynamic>();
-                    var dict = (IDictionary<String, Object>)records;
+                    var record = csv.GetRecord<dynamic>();
+                    var dict = (IDictionary<string, object>)record;
 
-                    StudentModel? student = null;
-                    if (file.FileName == "100_students.csv") {
-                        student = new StudentModel()
-                        {
-                            StudentId = dict.ElementAt(0).Value?.ToString()?.Trim() ?? "",
-                            FirstName = dict.ElementAt(1).Value?.ToString()?.Trim() ?? "",
-                            MiddleName = dict.ElementAt(2).Value?.ToString()?.Trim() ?? "",
-                            SurName = dict.ElementAt(3).Value?.ToString()?.Trim() ?? "",
-                            DateOfBirth = dict.ElementAt(4).Value?.ToString()?.Trim() ?? "",
-                            Gender = dict.ElementAt(5).Value?.ToString()?.Trim() ?? "",
-                            CivilStatus = dict.ElementAt(6).Value?.ToString()?.Trim() ?? "",
-                            Nationality = dict.ElementAt(7).Value?.ToString()?.Trim() ?? "",
-                            Religion = dict.ElementAt(8).Value?.ToString()?.Trim() ?? "",
-                            BloodType = dict.ElementAt(9).Value?.ToString()?.Trim() ?? "",
-                            Course = dict.ElementAt(10).Value?.ToString()?.Trim() ?? "",
-                            YearLevel = dict.ElementAt(11).Value?.ToString()?.Trim() ?? "",
-                            Section = dict.ElementAt(12).Value?.ToString()?.Trim() ?? "",
-                            GPA = dict.ElementAt(13).Value?.ToString()?.Trim() ?? "",
-                            Status = dict.ElementAt(14).Value?.ToString()?.Trim() ?? "",
-                            Scholarship = dict.ElementAt(15).Value?.ToString()?.Trim() ?? "",
-                            Remarks = dict.ElementAt(16).Value?.ToString()?.Trim() ?? "",
-                            StudentType = dict.ElementAt(17).Value?.ToString()?.Trim() ?? "",
-                            LastEnrolledSemester = dict.ElementAt(18).Value?.ToString()?.Trim() ?? "",
-                            Email = dict.ElementAt(19).Value?.ToString()?.Trim() ?? "",
-                            PhoneNumber = dict.ElementAt(20).Value?.ToString()?.Trim() ?? "",
-                            Address = dict.ElementAt(21).Value?.ToString()?.Trim() ?? "",
-                            GuardianName = dict.ElementAt(22).Value?.ToString()?.Trim() ?? "",
-                            GuardianContact = dict.ElementAt(23).Value?.ToString()?.Trim() ?? "",
-                            EmergencyContact = dict.ElementAt(24).Value?.ToString()?.Trim() ?? "",
-                            AdmissionDate = dict.ElementAt(25).Value?.ToString()?.Trim() ?? "",
-                            GraduationDate = dict.ElementAt(26).Value?.ToString()?.Trim() ?? ""
-                        };
+                    var student = new StudentModel();
 
-                        if (string.IsNullOrEmpty(student.StudentId) || !long.TryParse(student.StudentId, out long id))
-                        {
-                            student.Errors.Add("Student ID must be provided and must be in numberic form");
-                        }
+                    student.StudentId = int.TryParse(mapping["StudentId"], out var sIdIdx) && sIdIdx >= 0 && sIdIdx < dict.Count
+                        ? dict.ElementAt(sIdIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(student.StudentId) || !long.TryParse(student.StudentId, out _))
+                        student.Errors.Add("Student ID is required and must be numeric.");
+
+                    student.FirstName = int.TryParse(mapping["FirstName"], out var fIdx) && fIdx >= 0 && fIdx < dict.Count
+                        ? dict.ElementAt(fIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(student.FirstName))
+                        student.Errors.Add("First Name is required.");
+
+                    student.MiddleName = int.TryParse(mapping["MiddleName"], out var mIdx) && mIdx >= 0 && mIdx < dict.Count
+                        ? dict.ElementAt(mIdx).Value?.ToString()?.Trim() ?? "" : "";
+
+                    student.SurName = int.TryParse(mapping["SurName"], out var snIdx) && snIdx >= 0 && snIdx < dict.Count
+                        ? dict.ElementAt(snIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (string.IsNullOrWhiteSpace(student.SurName))
+                        student.Errors.Add("Surname is required.");
+
+                    student.DateOfBirth = int.TryParse(mapping["DateOfBirth"], out var dobIdx) && dobIdx >= 0 && dobIdx < dict.Count
+                        ? dict.ElementAt(dobIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.DateOfBirth) && !DateTime.TryParse(student.DateOfBirth, out _))
+                        student.Errors.Add("DateOfBirth is invalid.");
+
+                    student.Gender = int.TryParse(mapping["Gender"], out var gIdx) && gIdx >= 0 && gIdx < dict.Count
+                        ? dict.ElementAt(gIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.Gender))
+                    {
+                        var g = student.Gender.Trim().ToLower();
+                        if (g != "male" && g != "female")
+                            student.Errors.Add("Gender must be 'Male' or 'Female'.");
                     }
+
+                    student.CivilStatus = int.TryParse(mapping["CivilStatus"], out var csIdx) && csIdx >= 0 && csIdx < dict.Count
+                        ? dict.ElementAt(csIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.Nationality = int.TryParse(mapping["Nationality"], out var nIdx) && nIdx >= 0 && nIdx < dict.Count
+                        ? dict.ElementAt(nIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.Religion = int.TryParse(mapping["Religion"], out var rIdx) && rIdx >= 0 && rIdx < dict.Count
+                        ? dict.ElementAt(rIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.BloodType = int.TryParse(mapping["BloodType"], out var btIdx) && btIdx >= 0 && btIdx < dict.Count
+                        ? dict.ElementAt(btIdx).Value?.ToString()?.Trim() ?? "" : "";
+
+                    student.Course = int.TryParse(mapping["Course"], out var cIdx) && cIdx >= 0 && cIdx < dict.Count
+                        ? dict.ElementAt(cIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.YearLevel = int.TryParse(mapping["YearLevel"], out var ylIdx) && ylIdx >= 0 && ylIdx < dict.Count
+                        ? dict.ElementAt(ylIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.YearLevel) && !int.TryParse(student.YearLevel, out _))
+                        student.Errors.Add("YearLevel must be numeric.");
+
+                    student.Section = int.TryParse(mapping["Section"], out var secIdx) && secIdx >= 0 && secIdx < dict.Count
+                        ? dict.ElementAt(secIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.GPA = int.TryParse(mapping["GPA"], out var gpaIdx) && gpaIdx >= 0 && gpaIdx < dict.Count
+                        ? dict.ElementAt(gpaIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.GPA) && !double.TryParse(student.GPA, out _))
+                        student.Errors.Add("GPA must be numeric.");
+
+                    student.Status = int.TryParse(mapping["Status"], out var stIdx) && stIdx >= 0 && stIdx < dict.Count
+                        ? dict.ElementAt(stIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.Scholarship = int.TryParse(mapping["Scholarship"], out var schIdx) && schIdx >= 0 && schIdx < dict.Count
+                        ? dict.ElementAt(schIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.Remarks = int.TryParse(mapping["Remarks"], out var remIdx) && remIdx >= 0 && remIdx < dict.Count
+                        ? dict.ElementAt(remIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.StudentType = int.TryParse(mapping["StudentType"], out var stypeIdx) && stypeIdx >= 0 && stypeIdx < dict.Count
+                        ? dict.ElementAt(stypeIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.LastEnrolledSemester = int.TryParse(mapping["LastEnrolledSemester"], out var lesIdx) && lesIdx >= 0 && lesIdx < dict.Count
+                        ? dict.ElementAt(lesIdx).Value?.ToString()?.Trim() ?? "" : "";
+
+                    student.Email = int.TryParse(mapping["Email"], out var eIdx) && eIdx >= 0 && eIdx < dict.Count
+                        ? dict.ElementAt(eIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.Email))
+                    {
+                        try { var addr = new System.Net.Mail.MailAddress(student.Email); if (addr.Address != student.Email) student.Errors.Add("Email is invalid."); }
+                        catch { student.Errors.Add("Email is invalid."); }
+                    }
+
+                    student.PhoneNumber = int.TryParse(mapping["PhoneNumber"], out var pIdx) && pIdx >= 0 && pIdx < dict.Count
+                        ? dict.ElementAt(pIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.PhoneNumber) && !System.Text.RegularExpressions.Regex.IsMatch(student.PhoneNumber, @"^\d+$"))
+                        student.Errors.Add("PhoneNumber is invalid.");
+
+                    student.Address = int.TryParse(mapping["Address"], out var addrIdx) && addrIdx >= 0 && addrIdx < dict.Count
+                        ? dict.ElementAt(addrIdx).Value?.ToString()?.Trim() ?? "" : "";
+
+                    student.GuardianName = int.TryParse(mapping["GuardianName"], out var gnameIdx) && gnameIdx >= 0 && gnameIdx < dict.Count
+                        ? dict.ElementAt(gnameIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.GuardianContact = int.TryParse(mapping["GuardianContact"], out var gcontIdx) && gcontIdx >= 0 && gcontIdx < dict.Count
+                        ? dict.ElementAt(gcontIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    student.EmergencyContact = int.TryParse(mapping["EmergencyContact"], out var ecIdx) && ecIdx >= 0 && ecIdx < dict.Count
+                        ? dict.ElementAt(ecIdx).Value?.ToString()?.Trim() ?? "" : "";
+
+                    student.AdmissionDate = int.TryParse(mapping["AdmissionDate"], out var adIdx) && adIdx >= 0 && adIdx < dict.Count
+                        ? dict.ElementAt(adIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.AdmissionDate) && !DateTime.TryParse(student.AdmissionDate, out _))
+                        student.Errors.Add("AdmissionDate is invalid.");
+
+                    student.GraduationDate = int.TryParse(mapping["GraduationDate"], out var gdIdx) && gdIdx >= 0 && gdIdx < dict.Count
+                        ? dict.ElementAt(gdIdx).Value?.ToString()?.Trim() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(student.GraduationDate) && !DateTime.TryParse(student.GraduationDate, out _))
+                        student.Errors.Add("GraduationDate is invalid.");
 
                     students.Add(student);
                 }
 
                 return Results.Ok(new { results = students });
             }
-            catch (Exception e) 
+            catch (Exception ex)
             {
-                Console.WriteLine(e.Message);
+                Console.WriteLine(ex.Message);
                 return Results.Problem("Internal Server Error");
             }
         });

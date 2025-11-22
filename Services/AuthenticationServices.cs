@@ -27,6 +27,7 @@ public class AuthenticationServices
     {
         email = email?.Trim() ?? "";
         password = password?.Trim() ?? "";
+        Console.WriteLine($"AuthenticateUser called with email: {password}");
 
         var validationErrors = new List<string>();
 
@@ -50,10 +51,11 @@ public class AuthenticationServices
 
         Account? account = null;
 
-        const string selectQuery = "SELECT * FROM accounts WHERE email = @Email";
+        const string selectQuery = "SELECT * FROM accounts WHERE email = @Email AND is_verified = @Verified LIMIT 1";
         await using (var cmd = new MySqlCommand(selectQuery, conn))
         {
             cmd.Parameters.AddWithValue("@Email", email);
+            cmd.Parameters.AddWithValue("@Verified", true);
 
             await using var reader = await cmd.ExecuteReaderAsync();
             if (await reader.ReadAsync())
@@ -118,12 +120,6 @@ public class AuthenticationServices
             updateCmd.Parameters.AddWithValue("@Id", account.Id);
             await updateCmd.ExecuteNonQueryAsync();
         }
-
-        await _emailService.SendEmailAsync(
-            account.Email,
-            "New Login Detected",
-            $"A new login to your account was detected on {DateTime.UtcNow} UTC. If this wasn't you, please secure your account immediately."
-        );
 
         return new LoginResult
         {
@@ -244,6 +240,34 @@ public class AuthenticationServices
                 await cmd2.ExecuteNonQueryAsync();
             }
 
+            var bytes = RandomNumberGenerator.GetBytes(32);
+            var token = Convert.ToBase64String(bytes);
+            token = token.Replace("+", "-")
+                 .Replace("/", "_")
+                 .Replace("=", "");
+            var expiresAt = DateTime.UtcNow.AddHours(24);
+
+            // Insert email verification token
+            await using (var cmd3 = new MySqlCommand(@"
+                INSERT INTO email_verifications (account_id, token, expires_at, used)
+                VALUES (LAST_INSERT_ID(), @Token, @ExpiresAt, 0);
+            ", conn))
+            {
+                cmd3.Parameters.AddWithValue("@Token", token);
+                cmd3.Parameters.AddWithValue("@ExpiresAt", expiresAt);
+
+                await cmd3.ExecuteNonQueryAsync();
+            }
+
+            var url = _config["Frontend:EmailVerificationUrl"];
+            var link = $"{url}?token={token}";
+
+            await _emailService.SendEmailAsync(
+                request.Email,
+                "Welcome to Our Service",
+                $"Hello {request.FirstName},\n\nYour account has been created. Please click the link to confirm your email. {link}"
+            );
+
             // Commit if all succeed
             await transaction.CommitAsync();
 
@@ -263,6 +287,168 @@ public class AuthenticationServices
                 Message = $"REGISTRATION FAILED: {ex.Message}"
             };
         }
+    }
+
+    public async Task<dynamic> VerifyEmail(String token)
+    {
+        using var connection = _dbHelper.GetConnection();
+        await connection.OpenAsync();
+
+        int accountId = 0;
+        using (var cmd = new MySqlCommand(@"
+            SELECT account_id, expires_at, used FROM email_verifications
+            WHERE token = @Token LIMIT 1",
+        connection))
+        {
+            cmd.Parameters.AddWithValue("@Token", token);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return new { Success = false, Message = "Invalid token" };
+            }
+
+            var expiresAt = reader.GetDateTime(reader.GetOrdinal("expires_at"));
+            var used = reader.GetBoolean(reader.GetOrdinal("used"));
+            if (used)
+            {
+                return new { Success = false, Message = "Token already used" };
+            }
+
+            if (expiresAt < DateTime.UtcNow)
+            {
+                return new { Success = false, Message = "Token expired" };
+            }
+
+            accountId = reader.GetInt32(reader.GetOrdinal("account_id"));
+        }
+
+        using (var cmd = new MySqlCommand(@"
+            UPDATE accounts SET is_verified = 1 WHERE id = @AccountId",
+        connection))
+        {
+            cmd.Parameters.AddWithValue("@AccountId", accountId);
+
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        using (var cmd = new MySqlCommand(@"
+            UPDATE email_verifications SET used = 1 WHERE token = @Token",
+        connection))
+        {
+            cmd.Parameters.AddWithValue("@Token", token);
+
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return new { Success = true };
+    }
+
+    public async Task<dynamic> RequestPasswordReset(String email)
+    {
+        using var connection = _dbHelper.GetConnection();
+        await connection.OpenAsync();
+
+        int id = 0;
+
+        await using (var cmd = new MySqlCommand("SELECT id FROM accounts WHERE email = @Email LIMIT 1", connection))
+        {
+            cmd.Parameters.AddWithValue("@Email", email);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync())
+            {
+                return new { Success = false };
+            }
+
+            id = reader.GetInt32(reader.GetOrdinal("id"));
+        }
+
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var token = Convert.ToBase64String(bytes);
+        token = token.Replace("+", "-")
+             .Replace("/", "_")
+             .Replace("=", "");
+
+        var expiresAt = DateTime.UtcNow.AddHours(1);
+
+        await using (var cmd = new MySqlCommand(@"
+            INSERT INTO password_resets (account_id, token, expires_at, used)
+            VALUES (@AccountId, @Token, @ExpiresAt, 0)",
+        connection))
+        {
+
+            cmd.Parameters.AddWithValue("@AccountId", id);
+            cmd.Parameters.AddWithValue("@Token", token);
+            cmd.Parameters.AddWithValue("@ExpiresAt", expiresAt);
+
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var url = _config["Frontend:ResetPasswordUrl"];
+        var link = $"{url}?token={token}";
+
+        await _emailService.SendEmailAsync(email, "Password reset request", $"Click the link to reset your password {link}");
+
+        return new { Success = true };
+    }
+
+    public async Task<dynamic> ResetPassword(String token, String newPassword)
+    {
+        Console.WriteLine($"ResetPassword called with token={token}, newPassword={newPassword}");
+        using var connection = _dbHelper.GetConnection();
+        await connection.OpenAsync();
+
+        int accountId = 0;
+        using (var cmd = new MySqlCommand(@"
+            SELECT account_id, expires_at, used FROM password_resets
+            WHERE token = @Token LIMIT 1",
+        connection))
+        {
+            cmd.Parameters.AddWithValue("@Token", token);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return new { Success = false, Message = "Invalid token" };
+            }
+
+            var expiresAt = reader.GetDateTime(reader.GetOrdinal("expires_at"));
+            var used = reader.GetBoolean(reader.GetOrdinal("used"));
+
+            if (used)
+            {
+                return new { Success = false, Message = "Token already used" };
+            }
+
+            if (expiresAt < DateTime.UtcNow)
+            {
+                return new { Success = false, Message = "Token expired" };
+            }
+
+            accountId = reader.GetInt32(reader.GetOrdinal("account_id"));
+        }
+
+        var hashedPassword = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        using (var cmd = new MySqlCommand(@"
+            UPDATE accounts SET password = @Password WHERE id = @AccountId",
+        connection))
+        {
+            cmd.Parameters.AddWithValue("@Password", hashedPassword);
+            cmd.Parameters.AddWithValue("@AccountId", accountId);
+
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        using (var cmd = new MySqlCommand(@"
+            UPDATE password_resets SET used = 1 WHERE token = @Token",
+        connection))
+        {
+            cmd.Parameters.AddWithValue("@Token", token);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return new { Success = true };
     }
 
     public async Task<TFAVerificationResult> VerifyTFA(String? token, String? code)
@@ -411,7 +597,7 @@ public class AuthenticationServices
         await connection.OpenAsync();
 
         // Check if the account already has 2FA enabled
-        using (var checkCmd = new MySqlCommand("SELECT two_factor_secret FROM accounts WHERE id = @id", connection))
+        using (var checkCmd = new MySqlCommand("SELECT two_factor_secret FROM accounts WHERE id = @id LIMIT 1", connection))
         {
             checkCmd.Parameters.AddWithValue("@id", userId);
             var existingSecret = await checkCmd.ExecuteScalarAsync();

@@ -83,7 +83,7 @@ public static class AuthEndpoints
             }
         });
 
-        group.MapPost("/change-password", [Authorize] async (HttpContext httpContext, UserServices userServices, ResetPasswordRequest request) =>
+        group.MapPost("/change-password", [Authorize] async (HttpContext httpContext, UserServices userServices, ResetPasswordRequestModel request) =>
         {
             var currentPassword = string.IsNullOrWhiteSpace(request.CurrentPassword) ? "" : request.CurrentPassword.Trim();
             var newPassword = string.IsNullOrWhiteSpace(request.NewPassword) ? "" : request.NewPassword.Trim();
@@ -109,6 +109,7 @@ public static class AuthEndpoints
             }
         });
 
+
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
         group.MapGet("/captcha/generate", (IMemoryCache cache) =>
         {
@@ -129,6 +130,39 @@ public static class AuthEndpoints
             cache.Set(captchaId, code, TimeSpan.FromMinutes(5));
 
             return Results.File(ms.ToArray(), "image/jpeg", captchaId);
+        });
+
+        group.MapPost("/forgot-password", async (EmailService emailService, AuthenticationServices authenticationService, ForgetPassword request) =>
+        {
+            Console.WriteLine(request.Email);
+            var result = await authenticationService.RequestPasswordReset(request.Email);
+
+            if (!result.Success)
+            {
+                return Results.Json(new { Message = "Account could not be verified!"}, statusCode: 400);
+            }
+
+            return Results.Json(new { Message = "Request sent!" }, statusCode: 200);
+        });
+
+        group.MapPost("/reset-password", async (AuthenticationServices authenticationService, ResetPasswordViaToken request) =>
+        {
+            var result = await authenticationService.ResetPassword(request.Token, request.NewPassword);
+            if (!result.Success)
+            {
+                return Results.Json(new { Message = result.Message ?? "Password reset failed!" }, statusCode: 400);
+            }
+            return Results.Json(new { Message = "Password reset successful!" }, statusCode: 200);
+        });
+
+        group.MapPost("/verify-email", async (AuthenticationServices authenticationService, EmailVerficationRequestModel request) =>
+        {
+            var result = await authenticationService.VerifyEmail(request.Token);
+            if (!result.Success)
+            {
+                return Results.Json(new { Message = result.Message ?? "Email verification failed!" }, statusCode: 400);
+            }
+            return Results.Json(new { Message = "Email verification successful!" }, statusCode: 200);
         });
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.

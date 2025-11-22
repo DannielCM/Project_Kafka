@@ -1,7 +1,7 @@
-namespace AuthenticationBackend.Endpoints;
-public class ResetPasswordRequest
+namespace MyAuthenticationBackend.Models;
+public class ResetPasswordRequestModel
 {
-    public string? CurrentPassword { get; set; } = "";
-    public string? NewPassword { get; set; } = "";
-    public string? NewPasswordConfirmation { get; set; } = "";
+    public string? CurrentPassword { get; set; }
+    public string? NewPassword { get; set; }
+    public string? NewPasswordConfirmation { get; set; }
 }
