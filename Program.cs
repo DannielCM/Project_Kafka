@@ -24,6 +24,7 @@ builder.Services.AddSingleton(new DbHelper(connStr));
 builder.Services.AddSingleton<JwtServices>();
 builder.Services.AddSingleton<UserServices>();
 builder.Services.AddSingleton<CaptchaServices>();
+builder.Services.AddSingleton<AuditHelper>();
 builder.Services.Configure<SmtpSettings>(
     builder.Configuration.GetSection("SMTP")
 );

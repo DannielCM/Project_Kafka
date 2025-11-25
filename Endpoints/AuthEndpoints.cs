@@ -20,6 +20,44 @@ public static class AuthEndpoints
 
         group.MapGet("/", () => "authentication route");
 
+        group.MapGet("/audit", [Authorize] async (HttpContext httpContext, DbHelper dbHelper) =>
+        {
+            var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!int.TryParse(userIdClaim, out int userId))
+            {
+                return Results.BadRequest("Invalid user ID.");
+            }
+
+            var audits = new List<AuditEvent>();
+
+            var connection = dbHelper.GetConnection();
+            await connection.OpenAsync();
+
+            var cmd = new MySqlCommand(@"
+                SELECT id, user_id, action, Timestamp, Status 
+                FROM audit_logs 
+                WHERE user_id = @userId
+                ORDER BY Timestamp DESC;
+            ", connection);
+            cmd.Parameters.AddWithValue("@userId", userId);
+            using (var reader = await cmd.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    audits.Add(new AuditEvent
+                    {
+                        UserId = reader.GetInt32(reader.GetOrdinal("user_id")),
+                        Action = reader.GetString(reader.GetOrdinal("action")),
+                        Timestamp = reader.GetDateTime(reader.GetOrdinal("timestamp")),
+                        Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status")),
+                    });
+                }
+            }
+
+            return Results.Json(audits, statusCode: 200);
+        });
+
         group.MapPost("/login", async (IMemoryCache cache, KafkaProducerService kafkaProducerService, AuthenticationServices authService, LogInRequest request, CaptchaServices captchaServices) =>
         {
             var email = request.Email.Trim().ToLower();
