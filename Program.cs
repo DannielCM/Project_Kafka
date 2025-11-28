@@ -115,5 +115,6 @@ app.MapAuthEndpoints();
 app.MapAPIEndpoints();
 app.MapUserEndpoints();
 
+app.Urls.Add("http://0.0.0.0:8080");
 // Run the app
 app.Run();

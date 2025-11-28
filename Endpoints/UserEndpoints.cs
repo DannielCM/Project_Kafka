@@ -182,33 +182,33 @@ public static class UserEndpoints
             if (file == null || file.Length == 0)
                 return Results.BadRequest(new { message = "No file uploaded" });
 
-            using var connection = dbHelper.GetConnection();
-            await connection.OpenAsync();
-
-            // Fetch mapping for the selected template
-            Dictionary<string, int> mapping = new();
-            using (var command = new MySqlCommand(
-                "SELECT field, column_index FROM template_fields WHERE template_id = @TemplateId", connection))
-            {
-                command.Parameters.AddWithValue("@TemplateId", templateId);
-
-                using var reader = await command.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    string field = reader.GetString(reader.GetOrdinal("field"));
-                    int columnIndex = reader.GetInt32(reader.GetOrdinal("column_index"));
-
-                    mapping[field] = columnIndex;
-                }
-            }
-
-            if (mapping.Count == 0)
-                return Results.BadRequest(new { message = "Template mapping not found." });
-
-            var students = new List<StudentModel>();
-
             try
             {
+                using var connection = dbHelper.GetConnection();
+                await connection.OpenAsync();
+
+                // Fetch mapping for the selected template
+                Dictionary<string, int> mapping = new();
+                using (var command = new MySqlCommand(
+                    "SELECT field, column_index FROM template_fields WHERE template_id = @TemplateId", connection))
+                {
+                    command.Parameters.AddWithValue("@TemplateId", templateId);
+
+                    using var qreader = await command.ExecuteReaderAsync();
+                    while (await qreader.ReadAsync())
+                    {
+                        string field = qreader.GetString(qreader.GetOrdinal("field"));
+                        int columnIndex = qreader.GetInt32(qreader.GetOrdinal("column_index"));
+
+                        mapping[field] = columnIndex;
+                    }
+                }
+
+                if (mapping.Count == 0)
+                    return Results.BadRequest(new { message = "Template mapping not found." });
+
+                var students = new List<StudentModel>();
+
                 using var reader = new StreamReader(file.OpenReadStream());
                 var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
                 {

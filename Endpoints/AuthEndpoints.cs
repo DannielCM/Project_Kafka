@@ -149,25 +149,10 @@ public static class AuthEndpoints
 
 
         // move the logic to a service class later, since the handler / endpoint is too cluttered.
-        group.MapGet("/captcha/generate", (IMemoryCache cache) =>
+        group.MapGet("/captcha/generate", (CaptchaServices captcha) =>
         {
-            // generate random code
-            string code = ImageFactory.CreateCode(5);
-
-            // create memory buffer for holding image data, 
-            using var ms = new MemoryStream();
-            // generate image and save to memory buffer
-            using (var img = ImageFactory.BuildImage(code, 60, 200, 20, 10))
-            {
-                img.CopyTo(ms);
-            }
-
-            // generate unique catpcha id
-            string captchaId = Guid.NewGuid().ToString();
-            // store the captcha code with id in the cache for 5 minutes
-            cache.Set(captchaId, code, TimeSpan.FromMinutes(5));
-
-            return Results.File(ms.ToArray(), "image/jpeg", captchaId);
+            var result = captcha.CreateCaptcha();
+            return Results.File(result.imageBytes, "image/png", result.captchaId);
         });
 
         group.MapPost("/forgot-password", async (EmailService emailService, AuthenticationServices authenticationService, ForgetPassword request) =>
