@@ -96,11 +96,6 @@ app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Routes
-app.MapGet("/", (string? user = "user") =>
-    Results.Json(new { message = $"Hello {user} from MyAuthenticationBackend!" }, statusCode: 200)
-);
-
 app.MapGet("/protected-endpoint", [Authorize(Roles = "admin")] (HttpContext context) =>
 {
     var user = context.User;
@@ -115,6 +110,9 @@ app.MapAuthEndpoints();
 app.MapAPIEndpoints();
 app.MapUserEndpoints();
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapFallbackToFile("index.html");
 app.Urls.Add("http://0.0.0.0:8080");
 // Run the app
 app.Run();

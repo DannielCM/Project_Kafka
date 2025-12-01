@@ -36,7 +36,7 @@ public class CaptchaServices
         {
             ctx.Fill(Color.White);
 
-            var font = SystemFonts.CreateFont("Liberation Sans", fontSize);
+            var font = SystemFonts.CreateFont("Arial", fontSize);
             ctx.DrawText(code, font, Color.Black, new PointF(20, 10));
 
             // ---- FIXED: Draw lines using PathBuilder + ctx.Draw() ----
